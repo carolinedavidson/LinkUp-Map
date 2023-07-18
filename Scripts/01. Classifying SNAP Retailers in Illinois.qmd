@@ -1,0 +1,408 @@
+---
+title: "01. Classifying SNAP Retailers in Illinois"
+author: "Caroline Davidson"
+format: html
+editor: visual
+---
+
+# Step 1: Classifying SNAP Retailers in Illinois
+
+The purpose of this Quarto document is to identify current Link Match partners on a list of all SNAP retailers in the state of Illinois, as well as classify non-partner SNAP retailers as potentially eligible or ineligible to be Link Match partners in the future.
+
+The inputs for this script are:
+
+-   a csv file of all SNAP retailers in the US from the USDA
+-   a csv file of LinkUp's current Brick and Mortar partners (downloaded from Airtable)
+-   a csv file of LinkUp's current Farm Direct partners (downloaded from Airtable)
+
+The outputs of this script are:
+
+-   a cleaned csv file of all SNAP retailers in the state of Illinois and their classifications as current Link Match partners, potential partners, or ineligible as well as a classification for likely type of retailer based on the store's name. This file will be used in subsequent scripts to generate maps.
+
+```{r setup}
+#| echo: false
+#| include: false
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+rm(list=ls())
+library(tidyverse)
+```
+
+Load SNAP retailers data from csv file
+
+```{r load data}
+retailers <- read_csv("Data/Retailers and Partners/Input/SNAP_Store_Locations.csv", show_col_types = FALSE)
+retailers <- retailers %>% filter(State == "IL") # keep only stores in Illinois
+```
+
+The next code chunk creates lists of keywords to categorize stores by likely store type. IMPORTANT NOTES:
+
+-   new keywords can be added to the lists of keywords for existing store types and this document re-run to generate an updated file
+-   add all new keywords in lowercase letters
+-   if new *types* of stores are added here (e.g. ice_cream_shop), there are subsequent code chunks that will also need to be updated accordingly, so that subsequent parts of this script consider this new store type as well. Additionally, a decision will need to be made about whether this is an eligible or ineligible store type for Link Match partnership.
+
+```{r store type keywords}
+# this section is types of stores that would not be eligible partners (they will be classified as such in a subsequent code chunk)
+Dollar_Stores <- c("dollar")
+Gas_Stations <- c("gas", "fuel", "petroleum", "petro", "oil",
+                  "circle k", "shell", "expresslane", "hucks", "huck's",
+                  "citgo", "mobile", "mobil", "jiffi stop", "bp",
+                  "graham c-stores", "gulf", "advance group", "beck's", "beeline mart",
+                  "bucky's", "amstar", "jbl", "love's travel stop", "loves travel",
+                  "git-n-go", "haymakers", "gei", "pilot", "flying j",
+                  "fast stop", "amoco", "meijer gas", "valero",
+                  "ta troy", "ta mt vernon", "ta morris", "ta elgin", "ta effingham", "ta chicago north",
+                  "rmarts", "ricky rockets", "phillip", "philip",
+                  "murphy usa", "murphy express", "marathon", "conoco")
+Convenience_Stores <- c("walgreens", "walgreesn", "walreens", "walgreen's", "walgreen", "walgrees",
+                        "cvs", 
+                        "casey's", "caseys",
+                        "7-eleven", "7- eleven", "7 eleven", "7eleven", 
+                        "speedway", "mach 1",
+                        "thornton", "qc mart", "jack flash", 
+                        "j.j. peppers", "hometown pantry",
+                        "convenient", "convenience", "carwash", "car wash", "pharmacy",
+                        "quick", "quik", "village pantry", 
+                        "fas mart", "motomart", "moto mart", "road ranger", "rebel",
+                        "quik n ez", "quik-n-ez", "minit mart", "big 10 mart")
+
+Liquor_Stores <- c("liquor", "spirits", "beverage")
+Tobacco_Stores <- c("tobacco", "smoke ", "smokes", "smoke.")
+Bakeries <- c("bakery", "pastries", "baking", "panaderia")
+Meat_and_Fish_Markets <- c("meat", "butcher", "poultry", "carniceria", "carneceria", "pollo", 
+                           "fish", "seafood", "pescaderia")
+Discount_Retailers_NoProduce <- c("big lots")
+Delis <- c("deli")
+Frozen_Foods_Retailers <- c("schwans", "frozen")
+Independent_General_Stores <- c("general store")
+Restaurants_Fast_Food <- c("pizza", "papa murphy's")
+
+
+# this section includes types of stores that would be eligible partners (they will be classified as such in a subsequent code chunk)
+Large_Grocery_Chains <- c("jewel", "aldi", "kroger", "target", "walmart",
+                          "mariano", "whole food", "whole foods",
+                          "one stop", "sam's club", "save a lot", "costco",
+                          "amazon", "save-a-lot", 
+                          "trader joe's", "stop n shop",
+                          "h mart midwest", "h mart chicago", "h mart glenview", "h mart fresh",
+                          "schnucks", "gordon food service store", "cub foods", "meijer",
+                          "hy-vee", "county market")
+Small_Medium_Grocery_Chains <- c("woodmans", "woodman's", 
+                                 "walts food center", "walt's food center",
+                                 "butera", 
+                                 "berkot's",
+                                 "sullivan's foods", "sullivans foods","sullivans county market 274", "sullivan foods 240",
+                                 "kirby foods",
+                                 "heinen's",
+                                 "krystyna's market",
+                                 "tony's finer foods",
+                                 "sunset foods",
+                                 "sunrise health foods",
+                                 "south loop market",
+                                 "shop and save market", "shop & save market",
+                                 "ruler",
+                                 "fruitful yield",
+                                 "fresh international market", 
+                                 "fresh farms international market",
+                                 "food 4 less", "food for less",
+                                 "fairplay foods",
+                                 "brookhaven market")
+Farmers_Markets <- c("farmers market", "farmer's market", "farmers' market")
+CSAs <- c("csa")
+Grocery_Stores <- c("grocery", "grocer",
+                    "supermarket", "super market", "supermercado", "supermercardo")
+Farm_Stands <- c("farm stand", "farm market")
+Fresh_Markets <- c("fresh market", "fresh mart")
+Mini_Marts <- c("mini market", "mini mart", "minimart")
+Food_Markets <- c("food mart", "food market", "food pantry")
+Fruit_and_Vegetable_Retailers <- c("fruit ", "produce", "vegetable", "fruteria")
+# keywords to explore still: farm, corner store, tobacco
+```
+
+This code chunk creates a new variable and categorizes SNAP retailers by likely store type based on the keywords in the previous code chunk. Note, order of this function matters since retailer names may contain multiple types of keywords. This command will work through this list and only classify retailers unclassified by previous lines (it will not overwrite any previous classifications). For example, and store called "Carol's Groceries and Liquor" will be classified as a liquor store if the Liquor Store line appears before the Grocery Store line in the code below.
+
+```{r store type classification}
+retailers$Store_Type <- NA
+retailers$Store_Type <- case_when(apply(sapply(Gas_Stations, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Gas Station",
+                                  apply(sapply(Large_Grocery_Chains, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Large Grocery Chain",
+                                  apply(sapply(Small_Medium_Grocery_Chains, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Small to Medium Grocery Chain",
+                                  apply(sapply(Farmers_Markets, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Farmers Market",
+                                  apply(sapply(CSAs, grepl, tolower(retailers$Store_Name)), 1, any) ~ "CSA",
+                                  apply(sapply(Grocery_Stores, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Grocery Store",
+                                  apply(sapply(Fresh_Markets, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Fresh Market",
+                                  apply(sapply(Farm_Stands, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Farm Stand",
+                                  apply(sapply(Dollar_Stores, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Dollar Store",
+                                  apply(sapply(Convenience_Stores, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Convenience Store",
+                                  apply(sapply(Liquor_Stores, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Liquor Store",
+                                  apply(sapply(Tobacco_Stores, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Tobacco Store",
+                                  apply(sapply(Bakeries, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Bakery",
+                                  apply(sapply(Meat_and_Fish_Markets, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Meat or Fish Market",
+                                  apply(sapply(Mini_Marts, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Mini Mart",
+                                  apply(sapply(Discount_Retailers_NoProduce, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Discount Retailers (no produce)",
+                                  apply(sapply(Delis, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Deli",
+                                  apply(sapply(Frozen_Foods_Retailers, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Frozen Foods Retailer",
+                                  apply(sapply(Food_Markets, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Food Market",
+                                  apply(sapply(Independent_General_Stores, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Independent General Store",
+                                  apply(sapply(Fruit_and_Vegetable_Retailers, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Fruit and/or Vegetable Retailer",
+                                  apply(sapply(Restaurants_Fast_Food, grepl, tolower(retailers$Store_Name)), 1, any) ~ "Restaurant or Fast Food")
+
+retailers <- relocate(retailers, Store_Type, .after=Store_Name) #reordering columns to improve readability
+retailers <- relocate(retailers, c(X, Y), .after=Latitude)
+```
+
+This code chunk checks how many stores are still unclassified, how many have been classified as each type.
+
+```{r store classification check}
+sum(is.na(retailers$Store_Type))
+table(retailers$Store_Type)
+
+# create subset of dataframe that only has NA store types to more easily identify new keywords
+NA_retailers <- subset(retailers, is.na(Store_Type))
+```
+
+We'll use this function to create unique identifiers to classify current Link Match partners as such.
+
+```{r unique ID SNAP retailers}
+first_block <- function(address) {
+  split_address <- strsplit(address, " ")[[1]]
+  return(split_address[1]) }
+
+# create unique identifiers for all stores in SNAP retailers dataframe
+retailers$unique_ID <- map(retailers$Address, first_block)
+retailers$unique_ID <- paste(retailers$unique_ID, retailers$Zip5)
+retailers$unique_ID <- gsub("\\s+", "", retailers$unique_ID)
+```
+
+This code chunk identifies current Brick and Mortar Link Match partners among the SNAP retailers.
+
+```{r Brick and Mortar partner identification}
+Brick_and_Mortar <- read_csv("Data/Retailers and Partners/Input/Brick and Mortar-FNS download.csv", show_col_types = FALSE)
+
+Brick_and_Mortar <- Brick_and_Mortar %>% rename("Full_Address" = "Firm - Physical Address")
+
+# grab last 5 numeric characters in address for zip code
+Brick_and_Mortar$Full_Address <- trimws(Brick_and_Mortar$Full_Address, "right")
+
+Brick_and_Mortar$Zip <- substr(Brick_and_Mortar$Full_Address, 
+                               nchar(Brick_and_Mortar$Full_Address)-4, 
+                               nchar(Brick_and_Mortar$Full_Address))
+
+# create unique identifier for Brick and Mortar stores
+Brick_and_Mortar$unique_ID <- map(Brick_and_Mortar$Full_Address, first_block)
+Brick_and_Mortar$unique_ID <- paste(Brick_and_Mortar$unique_ID, Brick_and_Mortar$Zip)
+Brick_and_Mortar$unique_ID <- gsub("\\s+", "", Brick_and_Mortar$unique_ID)
+
+# classify Brick and Mortar partners in SNAP retailers dataframe
+retailers$current_partner <- ifelse(retailers$unique_ID %in% Brick_and_Mortar$unique_ID, "Brick & Mortar", "No")
+
+# check that all partners classified and that each Brick and Mortar unique ID has only one match in retailers
+Brick_and_Mortar$n_matches <- sapply(1:nrow(Brick_and_Mortar), function(i){
+  sum(retailers$unique_ID == Brick_and_Mortar$unique_ID[i])
+})
+
+table(Brick_and_Mortar$n_matches)
+table(retailers$current_partner)
+```
+
+This code chunk identifies current Farm Direct (farmers markets, CSAs, etc) Link Match partners among the SNAP retailers.
+
+```{r Farm Direct partner identification}
+Farm_Direct <- read_csv("Data/Retailers and Partners/Input/Farmers Markets-FNS.csv", show_col_types = FALSE)
+
+Farm_Direct <- Farm_Direct %>% rename("Physical_Address" = "Firm - Physical Address",
+                                      "Mailing_Address" = "Firm - Shipping/Mailing Address")
+# grab zip code from physical address
+Farm_Direct$Physical_Address <- trimws(Farm_Direct$Physical_Address, "right")
+Farm_Direct$Zip_Physical <- substr(Farm_Direct$Physical_Address, 
+                               nchar(Farm_Direct$Physical_Address)-4, 
+                               nchar(Farm_Direct$Physical_Address))
+
+# grab zip code from mailing address
+Farm_Direct$Mailing_Address <- trimws(Farm_Direct$Mailing_Address, "right")
+Farm_Direct$Zip_Mailing <- substr(Farm_Direct$Mailing_Address, 
+                                   nchar(Farm_Direct$Mailing_Address)-4, 
+                                   nchar(Farm_Direct$Mailing_Address))
+
+# create unique identifiers for Farm Direct partners based on physical and then mailing address
+Farm_Direct$unique_ID_physical <- map(Farm_Direct$Physical_Address, first_block)
+Farm_Direct$unique_ID_physical <- paste(Farm_Direct$unique_ID_physical, Farm_Direct$Zip_Physical)
+Farm_Direct$unique_ID_physical <- gsub("\\s+", "", Farm_Direct$unique_ID_physical)
+
+Farm_Direct$unique_ID_mailing <- map(Farm_Direct$Mailing_Address, first_block)
+Farm_Direct$unique_ID_mailing <- paste(Farm_Direct$unique_ID_mailing, Farm_Direct$Zip_Mailing)
+Farm_Direct$unique_ID_mailing <- gsub("\\s+", "", Farm_Direct$unique_ID_mailing)
+
+# check that each Farm Direct unique ID has only one match in retailers
+# for those with multiple matches, overwrite the relevant unique ID field to avoid double matching
+Farm_Direct$n_matches_physical <- sapply(1:nrow(Farm_Direct), function(i){
+  sum(retailers$unique_ID == Farm_Direct$unique_ID_physical[i])
+})
+
+Farm_Direct$unique_ID_physical <- ifelse(Farm_Direct$n_matches_physical > 1, "Multiple Matches", Farm_Direct$unique_ID_physical)
+
+Farm_Direct$n_matches_mailing <- sapply(1:nrow(Farm_Direct), function(i){
+  sum(retailers$unique_ID == Farm_Direct$unique_ID_mailing[i])
+})
+
+Farm_Direct$unique_ID_mailing <- ifelse(Farm_Direct$n_matches_mailing > 1, "Multiple Matches", Farm_Direct$unique_ID_mailing)
+
+# two partners share the same unique_ID_mailing with incorrect matches in the SNAP database. 
+# overwrite those IDs to avoid incorrect matching later on
+Farm_Direct$unique_ID_mailing <- ifelse(
+  Farm_Direct$Firm %in% c("Downtown Evanston Farmers' Market", "Terripin Farms"), "Incorrect Match",
+  Farm_Direct$unique_ID_mailing)
+
+# check number that match on name
+Farm_Direct$Name_Matches <- ifelse(tolower(Farm_Direct$Firm) %in% tolower(retailers$Store_Name), "Yes", "No")
+
+# create list of names to hard code 
+# (external is name in SNAP retailers df, internal is name in Farm_Direct df)
+Farm_Direct_names_external <- c("Qc Farmers' Market",
+                                "Batavia Farmer's Market",
+                                "The Land Of Goshen Community Market",
+                                "Gary Comer Youth Center Farmers' Market",
+                                "Alton Farmers & Artisans Farmers Market/Alton Main",
+                                "Kankakee Farmers' Market",
+                                "Experimental Station",
+                                "Plant Chicago, NFP FM",
+                                "Plant Chicago",
+                                "Evanston Farmers' Market")
+
+Farm_Direct_names_internal <- c("QC Farmers Market",
+                                "Batavia Farmers' Market",
+                                "Land of Goshen Community Market",
+                                "Gary Comer Youth Center Farmers Market",
+                                "Alton Farmers' & Artisans' Market",
+                                "Kankakee Farmers Market",
+                                "61st Street Farmers Market",
+                                "Plant Chicago Farmers Market",
+                                "Plant Chicago Firehouse Market",
+                                "Downtown Evanston Farmers' Market")
+
+# create list of duplicate internal partners (e.g. 2 markets classified as separate in
+# Link Up's database but as one in the SNAP retailers database) 
+# Note: include name of just one of the duplicates here (to not match)
+Duplicates_internal <- c("Downtown Bloomington Indoor Farmers' Market",
+                         "Woodstock Farmers Market - Winter",
+                         "Garfield Park Neighborhood Market (Indoor)")
+
+# match based on unique IDs and name
+retailers$current_partner <- case_when(retailers$unique_ID %in% Farm_Direct$unique_ID_physical ~ "Farm Direct",
+                                       retailers$unique_ID %in% Farm_Direct$unique_ID_mailing ~ "Farm Direct",
+                                       tolower(retailers$Store_Name) %in% tolower(Farm_Direct$Firm) ~ "Farm Direct",
+                                       retailers$Store_Name %in% Farm_Direct_names_external ~ "Farm Direct",
+                                       TRUE ~ retailers$current_partner)
+
+# list of Link Up partners to ignore for map purposes (mostly CSAs and Mobile Markets and some new partners)
+do_not_map <- c("Muzz Mobile", "Pop Up Grocery", "Growing Home, Inc. Pop Up", 
+                "Fresh Moves Mobile Market", "Roosevelt Square Farmers Market", 
+                "Urban Growers Collective Collective Supported Agriculture/CSA", 
+                "LUCSA", "Chicago Patchwork Farms - CSA", "Aurora Farmers Market West")
+
+# identify which partners have been matched to hard code the rest
+Farm_Direct$matched <- case_when(Farm_Direct$Firm %in% Duplicates_internal ~ "duplicate", 
+                                 Farm_Direct$n_matches_physical == 1 ~ "matched on physical ID",
+                                 Farm_Direct$n_matches_mailing == 1 ~ "matched on mailing ID",
+                                 Farm_Direct$Name_Matches == "Yes" ~ "matched on name",
+                                 Farm_Direct$Firm %in% Farm_Direct_names_internal ~ "hard coded",
+                                 Farm_Direct$Firm %in% do_not_map ~ "ignored",
+                                 TRUE ~ "UNMATCHED")
+
+Farm_Direct <- relocate(Farm_Direct, matched, .after=Firm) #reordering columns to improve readability
+
+table(Farm_Direct$n_matches_physical, Farm_Direct$n_matches_mailing)
+table(retailers$current_partner)
+
+table(Farm_Direct$matched)
+```
+
+This code chunk appends LinkUp partners not in the SNAP database so that they can be mapped. I used the census geocoder website to generate longitude and latitude manually for these locations based on their physical address: https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?form
+
+```{r append select Farm Direct partners to SNAP list}
+custom_append <- c("North End City Market ", 
+                   "Eden Place Farms @ Beverly Market",
+                   "Terripin Farms")
+
+to_append <- subset(Farm_Direct, matched=="UNMATCHED" | Firm %in% custom_append)
+
+to_append <- to_append %>% rename(Store_Name = Firm,
+                                  Address = Physical_Address,
+                                  Zip5 = Zip_Physical,
+                                  unique_ID = unique_ID_physical)
+
+# to_append$Zip5 <- as.numeric(to_append$Zip5)
+
+# add current partner column
+to_append$current_partner <- "Farm Direct"
+
+# keep only those columns that match with retailers dataframe
+to_append <- subset(to_append, select=c(Store_Name,
+                                        Address,
+                                        Zip5,
+                                        unique_ID,
+                                        current_partner))
+
+# add longitude and latitude coordinates for these partners
+to_append$Longitude <- case_when(
+  to_append$Store_Name=="It Takes A Village Community  Farm Farm Stand" ~ -87.5563679334672,
+  to_append$Store_Name=="South Chicago Farm Stand" ~ -87.54293176104233,
+  to_append$Store_Name=="Green City Market Avondale" ~ -87.69285137406794,
+  to_append$Store_Name=="Chicago Patchwork Farms - Farm Stand" ~ -87.69769608030494,
+  to_append$Store_Name== "North End City Market " ~ -89.08058766892303,
+  to_append$Store_Name== "Eden Place Farms @ Beverly Market" ~ -87.66880002257213,
+  to_append$Store_Name== "Terripin Farms" ~ -91.35787008422737)
+
+to_append$Latitude <- case_when(
+  to_append$Store_Name=="It Takes A Village Community  Farm Farm Stand" ~ 41.48460641708722,
+  to_append$Store_Name=="South Chicago Farm Stand" ~ 41.7319012480994,
+  to_append$Store_Name=="Green City Market Avondale" ~ 41.93652052137669,
+  to_append$Store_Name=="Chicago Patchwork Farms - Farm Stand" ~ 41.89564669805732,
+  to_append$Store_Name== "North End City Market " ~ 42.28776654851742,
+  to_append$Store_Name== "Eden Place Farms @ Beverly Market" ~ 41.721056068747636,
+  to_append$Store_Name== "Terripin Farms" ~ 39.97524658194115)
+
+full_data <- bind_rows(retailers, to_append)
+```
+
+From this point on, work with the full_data dataframe.
+
+This code chunk defines a new variable the classified retailers as potential qualified partners (that likely sell fruits and vegetables), unqualified firms (likely don't sell fruits and vegetables), and current partners.
+
+```{r potential partner classification}
+potential_partners <- c("Large Grocery Chain",
+                        "Small to Medium Grocery Chain",
+                        "Farmers Market", 
+                        "CSA",
+                        "Grocery Store",
+                        "Fresh Market",
+                        "Farm Stand",
+                        "Fruit and/or Vegetable Retailer",
+                        "Food Market",
+                        "Mini Mart")
+
+unqualified_retailers <- c("Dollar Store",
+                           "Gas Station",
+                           "Convenience Store",
+                           "Liquor Store",
+                           "Bakery",
+                           "Meat or Fish Market",
+                           "Discount Retailers (no produce)",
+                           "Deli",
+                           "Frozen Foods Retailer",
+                           "Independent General Store",
+                           "Restaurant or Fast Food")
+  
+full_data$potential_partner <- case_when(full_data$current_partner %in% c("Brick & Mortar", "Farm Direct") ~ "Current Partner",
+                                        full_data$Store_Type %in% potential_partners ~ "Potential Partner",
+                                        full_data$Store_Type %in% unqualified_retailers ~ "Unqualified",
+                                        TRUE ~ "NA")
+                                         
+table(full_data$potential_partner, full_data$current_partner)
+```
+
+This code chunk saves our full_data dataframe as a csv file to be used in subsequent scripts.
+
+```{r save data file}
+write_csv(full_data, file = "Data/Retailers and Partners/Output/IL Snap Retailers.csv")
+```

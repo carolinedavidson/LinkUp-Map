@@ -1,0 +1,26 @@
+---
+title: "02. Preparing Mappable Data"
+author: "Caroline Davidson"
+format: html
+editor: visual
+---
+ 
+# Step 2: Preparing Mappable Data
+
+The purpose of this Quarto document is to ... 
+
+```{r setup}
+#| echo: false
+#| include: false
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main project folder as working directory
+
+rm(list=ls())
+library(tidyverse)
+```
+
+
+```{r load data}
+SNAP_retailers <- read_csv("Data/Retailers and Partners/Output/IL SNAP Retailers.csv", show_col_types = FALSE)
+```
+
