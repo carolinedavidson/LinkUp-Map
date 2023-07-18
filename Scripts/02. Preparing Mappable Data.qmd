@@ -4,10 +4,10 @@ author: "Caroline Davidson"
 format: html
 editor: visual
 ---
- 
+
 # Step 2: Preparing Mappable Data
 
-The purpose of this Quarto document is to ... 
+The purpose of this Quarto document is to clean ...
 
 ```{r setup}
 #| echo: false
@@ -19,8 +19,6 @@ rm(list=ls())
 library(tidyverse)
 ```
 
-
 ```{r load data}
 SNAP_retailers <- read_csv("Data/Retailers and Partners/Output/IL SNAP Retailers.csv", show_col_types = FALSE)
 ```
-
