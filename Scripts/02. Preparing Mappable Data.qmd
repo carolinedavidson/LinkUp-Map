@@ -17,8 +17,45 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main 
 
 rm(list=ls())
 library(tidyverse)
+library(sf)
 ```
 
 ```{r load data}
+#| message: false
+#| warning: false
+# Link Up and SNAP retailers data
 SNAP_retailers <- read_csv("Data/Retailers and Partners/Output/IL SNAP Retailers.csv", show_col_types = FALSE)
+
+# geographic boundaries
+county_boundaries_polygon <- st_read("Data/Geographic Boundaries/Counties/IL counties POLYGON/Illinois.shp")
+# county_boundaries_line <- st_read("Data/Geographic Boundaries/Counties/IL counties LINE/Illinois.shp")
+census_tract_boundaries <- st_read("Data/Geographic Boundaries/Census Tracts/tl_2022_17_tract/tl_2022_17_tract.shp")
+
+# ACS data
+acs_5yr_data_ctract <- read_csv("Data/ACS Data/ACSST5Y2021.S2201_2023-07-11T173255/ACSST5Y2021.S2201-Data.csv")
+acs_5yr_data_tract <- acs_5yr_data_tract[-1,]
+acs_5yr_metadata <- read_csv("Data/ACS Data/ACSST5Y2021.S2201_2023-07-11T173255/ACSST5Y2021.S2201-Column-Metadata.csv")
+# fix formatting of metadata descriptions for readability
+acs_5yr_metadata$Label <- gsub("!!", ": ", acs_5yr_metadata$Label)
+
+## my one-year data is for the full state, need to re-download it for counties like I did for the 5 year data!!!!!!
+acs_1yr_data_county <- read_csv("Data/ACS Data/ACSST1Y2021.S2201_2023-04-26T122129/ACSST1Y2021.S2201-Data.csv")
+acs_1yr_metadata <- read_csv("Data/ACS Data/ACSST1Y2021.S2201_2023-04-26T122129/ACSST1Y2021.S2201-Column-Metadata.csv")
 ```
+Notes on data:
+
+
+- new census tracts shapefile that I read in has 3265 tracts! use it instead
+from here (add to gdoc): https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2022&layergroup=Census+Tracts 
+- ACS 1-Year data will be at the county level not census tract level
+- should I download 5-year data at the county level as well? I think so!
+
+
+```{r playing around with initial plotting}
+
+plot(county_boundaries_polygon)
+```
+
+
+
+
