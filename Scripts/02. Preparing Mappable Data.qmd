@@ -20,6 +20,7 @@ library(tidyverse)
 library(sf)
 library(ggplot2)
 
+
 # setting file path for proj.db since that's causing an error with maps generated with ggplot
 Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
@@ -166,8 +167,6 @@ county_acs_subset <- county_acs_subset %>%
 plot(county_acs_subset["S2201_C04_001E"])       
 
 
-
-
 ggplot() +
   geom_sf(data = county_acs_subset,
           aes(fill = S2201_C04_001E, color = S2201_C04_001E)) +
@@ -179,10 +178,55 @@ ggplot() +
     subtitle = "2021 5-Year Estimates from ACS"
   )
 
+# send via email to: ruffi@
 ```
 
+```{r}
+# intermediate materials to send
 
+County_Level_Snap_Data  <- county_acs_subset
 
+County_Level_Snap_Data <- County_Level_Snap_Data %>%
+  rename(
+    `County Name` = NAME,
+    `Number of Households receiving SNAP` = S2201_C03_001E,
+    `Number of Households receiving SNAP and below the poverty level` = S2201_C03_021E,
+    `Percent of Households receiving SNAP` = S2201_C04_001E
+    ) %>%
+  select(`County Name`, 
+         `Number of Households receiving SNAP`, 
+         `Number of Households receiving SNAP and below the poverty level`, 
+         `Percent of Households receiving SNAP`)
+
+class(County_Level_Snap_Data) # sf and data.frame, might be easier to select from original df
+
+County_Level_SNAP_Data <- acs_5yr_data_county %>% 
+  select(County,
+         S2201_C04_001E,
+         S2201_C03_001E,
+         S2201_C03_021E
+         ) %>%
+  mutate(
+    S2201_C04_001E = as.numeric(S2201_C04_001E),
+    S2201_C03_001E = as.numeric(S2201_C03_001E),
+    S2201_C03_021E = as.numeric(S2201_C03_021E)
+  ) %>%
+  arrange(desc(S2201_C04_001E)) %>%
+  rename(
+    `Number of Households receiving SNAP` = S2201_C03_001E,
+    `Number of Households receiving SNAP and below the poverty level` = S2201_C03_021E,
+    `Percent of Households receiving SNAP` = S2201_C04_001E
+  )
+
+write_csv(County_Level_SNAP_Data, file = "Output/County_Level_SNAP_data.csv")
+
+# plot of counties by percentage of households receiving SNAP benefits
+plot(county_acs_subset["S2201_C04_001E"], main = "Percentage of Households receiving SNAP by County") 
+```
+
+- S2201_C03_001E  /  Estimate: Households receiving food stamps/SNAP: Households
+- S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
+- S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
 
 ```{r playing around with initial plotting}
 
