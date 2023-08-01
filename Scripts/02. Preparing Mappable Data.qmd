@@ -19,6 +19,9 @@ rm(list=ls())
 library(tidyverse)
 library(sf)
 library(ggplot2)
+
+# setting file path for proj.db since that's causing an error with maps generated with ggplot
+Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
 
 The following code chunk loads the various datasets that will be used for mapping. These include:
@@ -162,9 +165,8 @@ county_acs_subset <- county_acs_subset %>%
 # map of counties by percent of households receiving food stamps/SNAP
 plot(county_acs_subset["S2201_C04_001E"])       
 
-# could move this to opening chunk later
-# setting file path for proj.db since that's causing an error with below code
-Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
+
+
 
 ggplot() +
   geom_sf(data = county_acs_subset,
