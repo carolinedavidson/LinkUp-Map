@@ -20,7 +20,6 @@ library(tidyverse)
 library(sf)
 library(ggplot2)
 
-
 # setting file path for proj.db since that's causing an error with maps generated with ggplot
 Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
@@ -32,7 +31,7 @@ The following code chunk loads the various datasets that will be used for mappin
 - SNAP-related Census data for Illinois (5 year estimates at the county and census tract levels)
 - metadata files that describe the variables in the above census tract files
 
-1-year ACS estimates are not available at the census tract level and are not available for all counties in Illinois, we all analysis will use the 5-year estimates.
+1-year ACS estimates are not available at the census tract level and are not available for all counties in Illinois, so all analysis will use the 5-year estimates.
 # when I'm done delete 1 year data calls below, keeping for now in case I want to investigate which counties are available
 
 ```{r load data}
@@ -42,9 +41,9 @@ The following code chunk loads the various datasets that will be used for mappin
 SNAP_retailers <- read_csv("Data/Retailers and Partners/Output/IL SNAP Retailers.csv", show_col_types = FALSE)
 
 # GEOGRAPHIC BOUNDARIES
-county_boundaries <- st_read("Data/Geographic Boundaries/Counties/IL counties POLYGON/Illinois.shp")
-# county_boundaries_line <- st_read("Data/Geographic Boundaries/Counties/IL counties LINE/Illinois.shp")
-census_tract_boundaries <- st_read("Data/Geographic Boundaries/Census Tracts/tl_2022_17_tract/tl_2022_17_tract.shp")
+boundaries_counties <- st_read("Data/Geographic Boundaries/Counties/IL counties POLYGON/Illinois.shp")
+# boundaries_line_counties <- st_read("Data/Geographic Boundaries/Counties/IL counties LINE/Illinois.shp")
+boundaries_census_tracts <- st_read("Data/Geographic Boundaries/Census Tracts/tl_2022_17_tract/tl_2022_17_tract.shp")
 
 # ACS DATA
 # 5-year estimates at the census tract level (1 year not available at census tract, just county, below)
@@ -55,10 +54,10 @@ acs_5yr_metadata_tract <- read_csv("Data/ACS Data/Census Tract Level/ACSST5Y2021
 acs_5yr_metadata_tract$Label <- gsub("!!", ": ", acs_5yr_metadata_tract$Label)
 
 # county level data for 1 year and 5 year estimates
-acs_1yr_data_county <- read_csv("Data/ACS Data/County Level/1 year estimates/ACSST1Y2021.S2201-Data.csv")
-acs_1yr_data_county <- acs_1yr_data_county[-1,]
-acs_1yr_metadata_county <- read_csv("Data/ACS Data/County Level/1 year estimates/ACSST1Y2021.S2201-Column-Metadata.csv")
-acs_1yr_metadata_county$Label <- gsub("!!", ": ", acs_1yr_metadata_county$Label)
+# acs_1yr_data_county <- read_csv("Data/ACS Data/County Level/1 year estimates/ACSST1Y2021.S2201-Data.csv")
+# acs_1yr_data_county <- acs_1yr_data_county[-1,]
+# acs_1yr_metadata_county <- read_csv("Data/ACS Data/County Level/1 year estimates/ACSST1Y2021.S2201-Column-Metadata.csv")
+# acs_1yr_metadata_county$Label <- gsub("!!", ": ", acs_1yr_metadata_county$Label)
 
 acs_5yr_data_county <- read_csv("Data/ACS Data/County Level/5 year estimates/ACSST5Y2021.S2201-Data.csv")
 acs_5yr_data_county <- acs_5yr_data_county[-1,]
@@ -68,19 +67,19 @@ acs_5yr_metadata_county$Label <- gsub("!!", ": ", acs_5yr_metadata_county$Label)
 
 # Data Exploration / Standardization
 This code chunk explores whether county names match across datasets. This is scratch work that can be deleted. The important code for this topic is in the code chunk after this one.
-```{r explore county names}
-# check if counties in acs_5yr_data_county and county_boundaries are the same (have same #)
+```{r explore county names - optional to run}
+# check if counties in acs_5yr_data_county and boundaries_counties are the same (have same #)
 # create new variable removing "County, Illinois" from end of county names in acs_5yr_data_county
 acs_5yr_data_county$County <- gsub(" County, Illinois", "", acs_5yr_data_county$NAME)
 acs_5yr_data_county <- relocate(acs_5yr_data_county, County, .after = NAME) # reorder columns
 
-# CROSS-CHECK: county_boundaries and acs_5yr_data_county (bi-directional)
-sum(tolower(county_boundaries$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County)) # 101 matches
-sum(!(tolower(county_boundaries$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County))) # 1 non-match
+# CROSS-CHECK: boundaries_county and acs_5yr_data_county (bi-directional)
+sum(tolower(boundaries_counties$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County)) # 101 matches
+sum(!(tolower(boundaries_counties$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County))) # 1 non-match
 # print out-non matches
-county_boundaries$COUNTY_NAM[!(tolower(county_boundaries$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County))]
-# DEWITT (in county_boundaries df)
-acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(county_boundaries$COUNTY_NAM))]
+boundaries_counties$COUNTY_NAM[!(tolower(boundaries_counties$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County))]
+# DEWITT (in boundaries_counties df)
+acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(boundaries_counties$COUNTY_NAM))]
 # De Witt (in acs data)
 
 # CROSS-CHECK: SNAP_retailers and acs_5yr_data_county (bi-directional)
@@ -95,32 +94,28 @@ SNAP_retailers_counties$County[!(tolower(SNAP_retailers_counties$County) %in% to
 acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(SNAP_retailers_counties$County))]
 # "DeKalb" "DuPage" "LaSalle" "St. Clair" (in acs data)
 
-# CROSS-CHECK: SNAP_retailers and county_boundaries (bi-directional)
-sum(tolower(SNAP_retailers_counties$County) %in% tolower(county_boundaries$COUNTY_NAM)) # 97 matches
-sum(!(tolower(SNAP_retailers_counties$County) %in% tolower(county_boundaries$COUNTY_NAM))) # 6 non-matches
+# CROSS-CHECK: SNAP_retailers and boundaries_counties (bi-directional)
+sum(tolower(SNAP_retailers_counties$County) %in% tolower(boundaries_counties$COUNTY_NAM)) # 97 matches
+sum(!(tolower(SNAP_retailers_counties$County) %in% tolower(boundaries_counties$COUNTY_NAM))) # 6 non-matches
 
-SNAP_retailers_counties$County[!(tolower(SNAP_retailers_counties$County) %in% tolower(county_boundaries$COUNTY_NAM))]
+SNAP_retailers_counties$County[!(tolower(SNAP_retailers_counties$County) %in% tolower(boundaries_counties$COUNTY_NAM))]
 # "DE KALB" "DE WITT" "DU PAGE" "LA SALLE" "ST CLAIR" and NA (in SNAP_retailers)
-county_boundaries$COUNTY_NAM[!(tolower(county_boundaries$COUNTY_NAM) %in% tolower(SNAP_retailers_counties$County))]
-#  "LASALLE" "DEKALB" "DEWITT" "DUPAGE"  "ST. CLAIR" (in county_boundaries)
-
-# make necessary adjustments to county names across dataframes
-# adjust "De Witt" to "DeWitt" in acs_5yr_data_county
-acs_5yr_data_county$County <- gsub("De Witt", "DeWitt", acs_5yr_data_county$County)
+boundaries_counties$COUNTY_NAM[!(tolower(boundaries_counties$COUNTY_NAM) %in% tolower(SNAP_retailers_counties$County))]
+#  "LASALLE" "DEKALB" "DEWITT" "DUPAGE"  "ST. CLAIR" (in boundaries_counties)
 ```
 
 The code chunk below re-codes DeWitt county in the ACS data to match the formatting in the shapefile to allow for joining the two datasets.
 ```{r adjust county names}
-# check if counties in acs_5yr_data_county and county_boundaries are the same (have same #)
+# check if counties in acs_5yr_data_county and boundaries_counties are the same (have same #)
 # create new variable removing "County, Illinois" from end of county names in acs_5yr_data_county
 acs_5yr_data_county$County <- gsub(" County, Illinois", "", acs_5yr_data_county$NAME)
 acs_5yr_data_county <- relocate(acs_5yr_data_county, County, .after = NAME) # reorder columns
 
-# CROSS-CHECK: county_boundaries and acs_5yr_data_county (bi-directional)
+# CROSS-CHECK: boundaries_counties and acs_5yr_data_county (bi-directional)
 # print out-non matches
-county_boundaries$COUNTY_NAM[!(tolower(county_boundaries$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County))]
-# DEWITT (in county_boundaries df)
-acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(county_boundaries$COUNTY_NAM))]
+boundaries_counties$COUNTY_NAM[!(tolower(boundaries_counties$COUNTY_NAM) %in% tolower(acs_5yr_data_county$County))]
+# DEWITT (in boundaries_counties df)
+acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(boundaries_counties$COUNTY_NAM))]
 # De Witt (in acs data)
 
 # make necessary adjustments to county names across dataframes
@@ -128,41 +123,87 @@ acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(co
 acs_5yr_data_county$County <- gsub("De Witt", "DeWitt", acs_5yr_data_county$County)
 ```
 
-# Joining Datasets
+# Joining Datasets for County Level
 
-```{r join acs and shape file - county level}
-# merges acs data to county boundary file
-county_acs <- merge(transform(county_boundaries, COUNTY_NAM = tolower(COUNTY_NAM)),
+```{r join acs, LinkUp, and shape file - county level}
+# merge acs data to county boundary shapefile
+county_acs <- merge(transform(boundaries_counties, COUNTY_NAM = tolower(COUNTY_NAM)),
                      transform(acs_5yr_data_county, County = tolower(County)),
                     by.x = "COUNTY_NAM", by.y = "County", all.x = TRUE)
 
-  
+# merge LinkUp data to county_acs  
 
 ```
 
-Need to determine what the variables of interest are in the ACS data. It might make sense to select only those variables to merge to the county_boundaries object to have a smaller dataframe to work with (both in terms of manageability, space, and downstream specifications for leaflet)
+# Joining Datasets for Census Tract Level
+Tract-level data needs to be joined by GEOID rather than tract number since tract numbers repeat across counties. 
+```{r tract GEOID check across datasets}
+# in acs data all geoIDs start with 1400000US then the geoID code that's the same as in shape file
+acs_5yr_data_tract$GEO_ID <- gsub("1400000US", "", acs_5yr_data_tract$GEO_ID)
 
-SNAP specific variables start at index 307 in metadata file
-interesting options for now to get started:
+# check that all GEO_IDs that show up in acs_5yr_data_tract show up in boundaries_census_tracts and vice versa
+sum(acs_5yr_data_tract$GEO_ID %in% boundaries_census_tracts$GEOID) #3265 matches
+sum(!(acs_5yr_data_tract$GEO_ID %in% boundaries_census_tracts$GEOID)) # 0 non-matches
+
+sum(boundaries_census_tracts$GEOID %in% acs_5yr_data_tract$GEO_ID) # 3265 matches
+sum(!(boundaries_census_tracts$GEOID %in% acs_5yr_data_tract$GEO_ID)) # - non-matches
+
+# checking that census tracts aren't repeated in the data
+length(unique(boundaries_census_tracts$GEOID)) # 3265 unique values
+length(unique(acs_5yr_data_tract$GEO_ID)) # 3265 unique values
+```
+
+The checks on GEO ID above all checked out (no repeated GEO IDs, same GEO IDs in both files) so the data is now ready to merge.
+```{r join acs, LinkUp, and shape file - census tract level}
+# merge acs data to census tract boundary shapefile
+tract_acs <- merge(boundaries_census_tracts,
+                   acs_5yr_data_tract,
+                   by.x = "GEOID", by.y = "GEO_ID", all = TRUE)
+
+# merge LinkUp data to county_acs  
+
+
+```
+
+
+# Initial Mapping
+At this point I'll select the variables of interest in the ACS data and create a subset of the data with only those variables to have a more manageable dataset to work with (there are over 900 variables in the ACS data). 
+
+SNAP specific variables start at index 307 in the metadata file. I selected the following variables for now:
 
 - S2201_C03_001E  /  Estimate: Households receiving food stamps/SNAP: Households
 - S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
 - S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
-
-
-```{r initial basic maps}
+# UPDATE BELOW ONCE I MERGE LINKUP DATA IN!
+```{r subset data for relevant SNAP variables}
+# COUNTY LEVEL DATA
 # creating a subset of my county_acs dataframe to mess around with more easily here:
 county_acs_subset <- county_acs %>% 
   select("COUNTY_NAM", "GEO_ID", "NAME", "S2201_C03_001E", "S2201_C03_021E", "S2201_C04_001E",
          "FID", "CO_FIPS", "Shape__Are", "Shape__Len", "geometry")
 
 # all the acs data is characters, resave relevant numbers as numeric
-
 county_acs_subset <- county_acs_subset %>% 
   mutate(S2201_C03_001E = as.numeric(S2201_C03_001E), 
          S2201_C03_021E = as.numeric(S2201_C03_021E), 
          S2201_C04_001E = as.numeric(S2201_C04_001E))
 
+# CENSUS TRACT LEVEL DATA
+tract_acs_subset <- tract_acs %>%
+  select("GEOID", "COUNTYFP", "Tract_Number", "County", 
+         "S2201_C03_001E", "S2201_C03_021E", "S2201_C04_001E",
+         "ALAND", "AWATER", "geometry")
+
+# convert relevant ACS data to numeric format
+tract_acs_subset <- tract_acs_subset %>%
+  mutate(S2201_C03_001E = as.numeric(S2201_C03_001E), 
+         S2201_C03_021E = as.numeric(S2201_C03_021E), 
+         S2201_C04_001E = as.numeric(S2201_C04_001E))
+# 8 NAs introduced for S2201_C04_001E where value was: -
+```
+
+
+```{r initial basic maps - county level}
 # map of counties by percent of households receiving food stamps/SNAP
 plot(county_acs_subset["S2201_C04_001E"])       
 
@@ -178,7 +219,6 @@ ggplot() +
     subtitle = "2021 5-Year Estimates from ACS"
   )
 
-# send via email to: ruffi@
 ```
 
 ```{r}
@@ -228,7 +268,46 @@ plot(county_acs_subset["S2201_C04_001E"], main = "Percentage of Households recei
 - S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
 - S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
 
-```{r playing around with initial plotting}
 
-plot(county_boundaries_polygon)
+
+
+
+
+
+###### Old Code
+
+
+
+The code chunk below investigates whether census tract names match across the ACS dataset and the census tract shapefile.
+- Census tract names in the acs_5yr_data_tract dataframe have the following name (format):
+    - NAME (Census Tract 107.01, Champaign County, Illinois)
+- Census tract names in the boundaries_census_tracts dataframe have the following name (format):
+    - NAME (107.01)
+We'll create a new column for the acs data that includes just the census tract name (same format as in boundaries_census_tracts) to allow for matching.
+
+```{r standardize tract numbers in acs data}
+# ACS DATA
+# TASK: create new columns in acs_5yr_data_tract that separate out census tract number and county
+# Step 1: make a copy of the NAME column called County (this column will hold only the county name at the end of these steps)
+acs_5yr_data_tract$County <- acs_5yr_data_tract$NAME 
+# Step 2: remove "Census Tract " from beginning of new County column 
+acs_5yr_data_tract$County <-  gsub("Census Tract ", "", acs_5yr_data_tract$County)
+# Step 3: remove " County, Illinois from end of County column
+acs_5yr_data_tract$County <-  gsub(" County, Illinois", "", acs_5yr_data_tract$County)
+# Step 4: Grab tract number and assign to new variable called Tract_Number (grabs everything up to and including the comma)
+acs_5yr_data_tract$Tract_Number <- str_extract(acs_5yr_data_tract$County, "^(.+?),")
+acs_5yr_data_tract$Tract_Number <- gsub(",", "", acs_5yr_data_tract$Tract_Number) # remove trailing comma
+# Step 5: Remove county number from County column
+acs_5yr_data_tract$County <- gsub("^(.+?), ", "", acs_5yr_data_tract$County)
+# Step 6: Reorder columns to make looking at data easier
+acs_5yr_data_tract <- relocate(acs_5yr_data_tract, c(Tract_Number, County), .after = NAME)
+# RESULT: County name contains only county name, Tract_Number column contains only tract number
+# we can now use the Tract_Number column in the acs data to match to the shape file
+
+# check names of these columns in these two dataframes
+# will check a subset to understand what's going on in each: tract number 107.01
+acs_tract_107.01_subset <- acs_5yr_data_tract %>% filter(Tract_Number == "107.01")
+boundaries_tract_107.01_subset <- boundaries_census_tracts %>% filter(NAME == "107.01")
 ```
+
+
