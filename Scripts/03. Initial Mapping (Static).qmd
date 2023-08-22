@@ -1,0 +1,131 @@
+---
+title: "03. Initial Mapping (Static)"
+author: "Caroline Davidson"
+format: html
+---
+
+# Step 3: Initial Mapping (Static, i.e. Noninteractive)
+
+```{r setup}
+#| echo: false
+#| include: false
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main project folder as working directory
+
+rm(list=ls())
+library(tidyverse)
+library(sf)
+```
+
+The below code chunk loads the csv datafiles that the previous two scripts create.
+```{r load data}
+
+```
+
+# MOVED OVER FROM SCRIPT 2
+
+# Initial Mapping
+At this point I'll select the variables of interest in the ACS data and create a subset of the data with only those variables to have a more manageable dataset to work with (there are over 900 variables in the ACS data). 
+
+SNAP specific variables start at index 307 in the metadata file. I selected the following variables for now:
+
+- S2201_C03_001E  /  Estimate: Households receiving food stamps/SNAP: Households
+- S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
+- S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
+# UPDATE BELOW ONCE I MERGE LINKUP DATA IN!
+```{r subset data for relevant SNAP variables}
+# COUNTY LEVEL DATA
+# creating a subset of my county_acs dataframe to mess around with more easily here:
+county_acs_subset <- county_acs %>% 
+  select("COUNTY_NAM", "GEO_ID", "NAME", "S2201_C03_001E", "S2201_C03_021E", "S2201_C04_001E",
+         "FID", "CO_FIPS", "Shape__Are", "Shape__Len", "geometry")
+
+# all the acs data is characters, resave relevant numbers as numeric
+county_acs_subset <- county_acs_subset %>% 
+  mutate(S2201_C03_001E = as.numeric(S2201_C03_001E), 
+         S2201_C03_021E = as.numeric(S2201_C03_021E), 
+         S2201_C04_001E = as.numeric(S2201_C04_001E))
+
+# CENSUS TRACT LEVEL DATA
+tract_acs_subset <- tract_acs %>%
+  select("GEOID", "COUNTYFP", "Tract_Number", "County", 
+         "S2201_C03_001E", "S2201_C03_021E", "S2201_C04_001E",
+         "ALAND", "AWATER", "geometry")
+
+# convert relevant ACS data to numeric format
+tract_acs_subset <- tract_acs_subset %>%
+  mutate(S2201_C03_001E = as.numeric(S2201_C03_001E), 
+         S2201_C03_021E = as.numeric(S2201_C03_021E), 
+         S2201_C04_001E = as.numeric(S2201_C04_001E))
+# 8 NAs introduced for S2201_C04_001E where value was: -
+```
+
+
+
+
+
+```{r initial basic maps - county level}
+# map of counties by percent of households receiving food stamps/SNAP
+plot(county_acs_subset["S2201_C04_001E"])       
+
+
+ggplot() +
+  geom_sf(data = county_acs_subset,
+          aes(fill = S2201_C04_001E, color = S2201_C04_001E)) +
+  scale_fill_brewer(palette = "YlGn", name = "Percentage", direction = -1) +
+  scale_color_brewer(palette = "YlGn", name = "Percentage", direction = -1) +
+  theme_void() +
+  labs(
+    title = "Percent of Households Receiving Food Stamps / SNAP by County",
+    subtitle = "2021 5-Year Estimates from ACS"
+  )
+
+```
+
+```{r}
+# intermediate materials to send
+
+County_Level_Snap_Data  <- county_acs_subset
+
+County_Level_Snap_Data <- County_Level_Snap_Data %>%
+  rename(
+    `County Name` = NAME,
+    `Number of Households receiving SNAP` = S2201_C03_001E,
+    `Number of Households receiving SNAP and below the poverty level` = S2201_C03_021E,
+    `Percent of Households receiving SNAP` = S2201_C04_001E
+    ) %>%
+  select(`County Name`, 
+         `Number of Households receiving SNAP`, 
+         `Number of Households receiving SNAP and below the poverty level`, 
+         `Percent of Households receiving SNAP`)
+
+class(County_Level_Snap_Data) # sf and data.frame, might be easier to select from original df
+
+County_Level_SNAP_Data <- acs_5yr_data_county %>% 
+  select(County,
+         S2201_C04_001E,
+         S2201_C03_001E,
+         S2201_C03_021E
+         ) %>%
+  mutate(
+    S2201_C04_001E = as.numeric(S2201_C04_001E),
+    S2201_C03_001E = as.numeric(S2201_C03_001E),
+    S2201_C03_021E = as.numeric(S2201_C03_021E)
+  ) %>%
+  arrange(desc(S2201_C04_001E)) %>%
+  rename(
+    `Number of Households receiving SNAP` = S2201_C03_001E,
+    `Number of Households receiving SNAP and below the poverty level` = S2201_C03_021E,
+    `Percent of Households receiving SNAP` = S2201_C04_001E
+  )
+
+write_csv(County_Level_SNAP_Data, file = "Output/County_Level_SNAP_data.csv")
+
+# plot of counties by percentage of households receiving SNAP benefits
+plot(county_acs_subset["S2201_C04_001E"], main = "Percentage of Households receiving SNAP by County") 
+```
+
+- S2201_C03_001E  /  Estimate: Households receiving food stamps/SNAP: Households
+- S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
+- S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
+
