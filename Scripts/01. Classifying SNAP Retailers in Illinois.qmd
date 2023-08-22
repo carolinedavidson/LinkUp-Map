@@ -320,47 +320,65 @@ table(Farm_Direct$matched)
 This code chunk appends LinkUp partners not in the SNAP database so that they can be mapped. I used the census geocoder website to generate longitude and latitude manually for these locations based on their physical address: https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?form
 
 ```{r append select Farm Direct partners to SNAP list}
-custom_append <- c("North End City Market ", 
+custom_append <- c("North End City Market", # incorrect/duplicate matches to append
                    "Eden Place Farms @ Beverly Market",
                    "Terripin Farms")
 
-to_append <- subset(Farm_Direct, matched=="UNMATCHED" | Firm %in% custom_append)
+to_append <- subset(Farm_Direct, matched == "UNMATCHED" | Firm %in% custom_append)
 
+# rename columns to match names in the retailers dataframe
 to_append <- to_append %>% rename(Store_Name = Firm,
                                   Address = Physical_Address,
                                   Zip5 = Zip_Physical,
                                   unique_ID = unique_ID_physical)
 
-# to_append$Zip5 <- as.numeric(to_append$Zip5)
-
 # add current partner column
 to_append$current_partner <- "Farm Direct"
 
 # keep only those columns that match with retailers dataframe
-to_append <- subset(to_append, select=c(Store_Name,
+to_append <- subset(to_append, select = c(Store_Name,
                                         Address,
                                         Zip5,
                                         unique_ID,
                                         current_partner))
 
+# create City and County columns for these partners
+to_append$City <- case_when(
+  to_append$Store_Name == "It Takes A Village Community  Farm Farm Stand" ~ "Sauk Village",
+  to_append$Store_Name == "South Chicago Farm Stand" ~ "Chicago",
+  to_append$Store_Name == "Green City Market Avondale" ~ "Chicago",
+  to_append$Store_Name == "Chicago Patchwork Farms - Farm Stand" ~ "Chicago",
+  to_append$Store_Name == "North End City Market" ~ "Rockford",
+  to_append$Store_Name == "Eden Place Farms @ Beverly Market" ~ "Chicago",
+  to_append$Store_Name == "Terripin Farms" ~ "Quincy")
+  
+to_append$County <- case_when(
+  to_append$Store_Name == "It Takes A Village Community  Farm Farm Stand" ~ "COOK",
+  to_append$Store_Name == "South Chicago Farm Stand" ~ "COOK",
+  to_append$Store_Name == "Green City Market Avondale" ~ "COOK",
+  to_append$Store_Name == "Chicago Patchwork Farms - Farm Stand" ~ "COOK",
+  to_append$Store_Name == "North End City Market" ~ "WINNEBAGO",
+  to_append$Store_Name == "Eden Place Farms @ Beverly Market" ~ "COOK",
+  to_append$Store_Name == "Terripin Farms" ~ "ADAMS")
+
 # add longitude and latitude coordinates for these partners
 to_append$Longitude <- case_when(
-  to_append$Store_Name=="It Takes A Village Community  Farm Farm Stand" ~ -87.5563679334672,
-  to_append$Store_Name=="South Chicago Farm Stand" ~ -87.54293176104233,
-  to_append$Store_Name=="Green City Market Avondale" ~ -87.69285137406794,
-  to_append$Store_Name=="Chicago Patchwork Farms - Farm Stand" ~ -87.69769608030494,
-  to_append$Store_Name== "North End City Market " ~ -89.08058766892303,
-  to_append$Store_Name== "Eden Place Farms @ Beverly Market" ~ -87.66880002257213,
-  to_append$Store_Name== "Terripin Farms" ~ -91.35787008422737)
+  to_append$Store_Name == "It Takes A Village Community  Farm Farm Stand" ~ -87.5563679334672,
+  to_append$Store_Name == "South Chicago Farm Stand" ~ -87.54293176104233,
+  to_append$Store_Name == "Green City Market Avondale" ~ -87.69285137406794,
+  to_append$Store_Name == "Chicago Patchwork Farms - Farm Stand" ~ -87.69769608030494,
+  to_append$Store_Name == "North End City Market" ~ -89.08058766892303,
+  to_append$Store_Name == "Eden Place Farms @ Beverly Market" ~ -87.66880002257213,
+  to_append$Store_Name == "Terripin Farms" ~ -91.35787008422737)
 
 to_append$Latitude <- case_when(
-  to_append$Store_Name=="It Takes A Village Community  Farm Farm Stand" ~ 41.48460641708722,
-  to_append$Store_Name=="South Chicago Farm Stand" ~ 41.7319012480994,
-  to_append$Store_Name=="Green City Market Avondale" ~ 41.93652052137669,
-  to_append$Store_Name=="Chicago Patchwork Farms - Farm Stand" ~ 41.89564669805732,
-  to_append$Store_Name== "North End City Market " ~ 42.28776654851742,
-  to_append$Store_Name== "Eden Place Farms @ Beverly Market" ~ 41.721056068747636,
-  to_append$Store_Name== "Terripin Farms" ~ 39.97524658194115)
+  to_append$Store_Name == "It Takes A Village Community  Farm Farm Stand" ~ 41.48460641708722,
+  to_append$Store_Name == "South Chicago Farm Stand" ~ 41.7319012480994,
+  to_append$Store_Name == "Green City Market Avondale" ~ 41.93652052137669,
+  to_append$Store_Name == "Chicago Patchwork Farms - Farm Stand" ~ 41.89564669805732,
+  to_append$Store_Name == "North End City Market" ~ 42.28776654851742,
+  to_append$Store_Name == "Eden Place Farms @ Beverly Market" ~ 41.721056068747636,
+  to_append$Store_Name == "Terripin Farms" ~ 39.97524658194115)
 
 full_data <- bind_rows(retailers, to_append)
 ```

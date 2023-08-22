@@ -23,6 +23,7 @@ library(sf)
 # Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
 
+## Load Data
 The following code chunk loads the various datasets that will be used for mapping. These include:
 
 - SNAP retailers database with Link Match partners identified (output from the first script in this project)
@@ -57,7 +58,8 @@ acs_5yr_metadata_county <- read_csv("Data/ACS Data/County Level/5 year estimates
 acs_5yr_metadata_county$Label <- gsub("!!", ": ", acs_5yr_metadata_county$Label)
 ```
 
-# Data Exploration / Standardization
+## Data Standardization - County Names
+
 This code chunk explores whether county names match across datasets. This is scratch work that does not need to be run. The important code for this topic is in the code chunk after this one.
 ```{r explore county names - optional to run}
 # check if counties in acs_5yr_data_county and boundaries_counties are the same (have same #)
@@ -91,13 +93,13 @@ sum(tolower(SNAP_retailers_counties$County) %in% tolower(boundaries_counties$COU
 sum(!(tolower(SNAP_retailers_counties$County) %in% tolower(boundaries_counties$COUNTY_NAM))) # 6 non-matches
 
 SNAP_retailers_counties$County[!(tolower(SNAP_retailers_counties$County) %in% tolower(boundaries_counties$COUNTY_NAM))]
-# "DE KALB" "DE WITT" "DU PAGE" "LA SALLE" "ST CLAIR" and NA (in SNAP_retailers)
+# "DE KALB" "DE WITT" "DU PAGE" "LA SALLE" "ST CLAIR" (in SNAP_retailers)
 boundaries_counties$COUNTY_NAM[!(tolower(boundaries_counties$COUNTY_NAM) %in% tolower(SNAP_retailers_counties$County))]
 #  "LASALLE" "DEKALB" "DEWITT" "DUPAGE"  "ST. CLAIR" (in boundaries_counties)
 ```
 
 The code chunk below investigates whether county names match across the ACS dataset and shapefile (the county column will be used to merge the two datasets). It then re-codes DeWitt county in the ACS data to match the formatting in the shapefile to allow for joining the two datasets.
-```{r adjust county names}
+```{r adjust county names in acs data}
 # check if counties in acs_5yr_data_county and boundaries_counties are the same (have same #)
 # create new variable removing "County, Illinois" from end of county names in acs_5yr_data_county
 acs_5yr_data_county$County <- gsub(" County, Illinois", "", acs_5yr_data_county$NAME)
@@ -114,6 +116,28 @@ acs_5yr_data_county$County[!(tolower(acs_5yr_data_county$County) %in% tolower(bo
 # adjust "De Witt" to "DeWitt" in acs_5yr_data_county
 acs_5yr_data_county$County <- gsub("De Witt", "DeWitt", acs_5yr_data_county$County)
 ```
+
+The following code chunk corrects county names in the SNAP_retailers dataset to match the format of the other datasets. This involves recoding county names as follows:
+
+- old >> new
+- DE KALB >> DEKALB
+- DE WITT >> DEWITT
+- DU PAGE >> DUPAGE
+- LA SALLE >> LASALLE
+- ST CLAIR >> ST. CLAIR
+```{r adjust county names in SNAP_retailers data}
+SNAP_retailers$County <- case_when(
+  SNAP_retailers$County == "DE KALB" ~ "DEKALB",
+  SNAP_retailers$County == "DE WITT" ~ "DEWITT",
+  SNAP_retailers$County == "DU PAGE" ~ "DUPAGE",
+  SNAP_retailers$County == "LA SALLE" ~ "LASALLE",
+  SNAP_retailers$County == "ST CLAIR" ~ "ST. CLAIR",
+  TRUE ~ SNAP_retailers$County
+)
+```
+
+
+## Data Standardization - Census Tract Numbers
 
 The code chunk below investigates whether census tract names match across the ACS dataset and the census tract shapefile.
 - Census tract names in the acs_5yr_data_tract dataframe have the following name (format):
@@ -234,10 +258,10 @@ region_west_central <- c("Adams", "Brown", "Hancock", "Henderson", "Knox",
                          "McDonough", "Pike", "Schuyler", "Warren")
 ```
 
-The code chunk below applies the regions defined above to the census tract and county level datasets by creating a new "region" variable in each and assigning it accordingly. If the designation of regions is changed above, the last two arguments of each line below should be adjusted accordingly. For example, if the Central region is changed to include different counties and its name changes to "Midstate", the first line inside the case_when function for county_acs below should change to:
+The code chunk below applies the regions defined above to the census tract and county level datasets as well as the SNAP data by creating a new "region" variable in each and assigning it accordingly. If the designation of regions is changed above, the last two arguments of each line below should be adjusted accordingly. For example, if the Central region is changed to include different counties and its name changes to "Midstate", the first line inside the case_when function for county_acs below should change to:
   tolower(county_acs$COUNTY_NAM) %in% tolower(region_midstate) ~ "Midstate",
   
-These adjustments will need to be made manually for both the county_acs and tract_acs datasets in the chunk below.
+These adjustments will need to be made manually for the county_acs, tract_acs, and SNAP_retailers datasets in the chunk below.
 ```{r apply IL regions to datasets}
 # add region variable for county-level data
 county_acs$region <- case_when(
@@ -274,8 +298,32 @@ tract_acs$region <- case_when(
 )
 
 tract_acs <- relocate(tract_acs, region, .after = County) # move new region column to appear after county name column
+
+# add region variable to SNAP retailers data
+SNAP_retailers$region <- case_when(
+  tolower(SNAP_retailers$County) %in% tolower(region_central) ~ "Central",
+  tolower(SNAP_retailers$County) %in% tolower(region_northern) ~ "Northern",
+  tolower(SNAP_retailers$County) %in% tolower(region_greater_chicago) ~ "Chicagoland",
+  tolower(SNAP_retailers$County) %in% tolower(region_collar_counties) ~ "Collar Counties",
+  tolower(SNAP_retailers$County) %in% tolower(region_northwest) ~ "Northwest",
+  tolower(SNAP_retailers$County) %in% tolower(region_north_central) ~ "North Central",
+  tolower(SNAP_retailers$County) %in% tolower(region_southeast_central) ~ "Southeast Central",
+  tolower(SNAP_retailers$County) %in% tolower(region_northeast_central) ~ "Northeast Central",
+  tolower(SNAP_retailers$County) %in% tolower(region_southern) ~ "Southern",
+  tolower(SNAP_retailers$County) %in% tolower(region_southwest_central) ~ "Southwest Central",
+  tolower(SNAP_retailers$County) %in% tolower(region_west_central) ~ "West Central",
+)
+
+SNAP_retailers <- relocate(SNAP_retailers, region, .after = County)
 ```
 
+The code chunk below calculates the number of current LinkUp partners per region.
+```{r}
+table(SNAP_retailers$region, useNA = "always") 
+
+LinkUp_partners <- SNAP_retailers %>% filter(potential_partner == "Current Partner")
+table(LinkUp_partners$region, useNA = "always")
+```
 
 
 
