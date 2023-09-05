@@ -1,0 +1,34 @@
+---
+title: "03. SNAP Data Maps"
+author: "Caroline Davidson"
+format: pdf
+---
+
+
+
+```{r setup}
+#| echo: false
+#| include: false
+knitr::opts_chunk$set(echo = FALSE)
+
+library(sf)
+library(tidyverse)
+
+```
+
+## Initial Maps
+
+```{r}
+plot(county_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by County")
+
+plot(tract_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Census Tract")
+
+plot(region_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Region")
+
+plot(region_acs["n_hh_snap"], main = "Number of Households Receiving SNAP by Region")
+
+plot(region_acs["n_LinkUpPartners_all"], main = "Number of LinkUp Partners by Region")
+
+```
+
+

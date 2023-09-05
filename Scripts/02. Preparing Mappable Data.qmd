@@ -7,7 +7,14 @@ editor: visual
 
 # Step 2: Preparing Mappable Data
 
-The purpose of this file is to prepare data for mapping. This entails loading and formatting the various data files and shapefiles (geographic boundary files) as well as joining them so that ACS data can be mapped onto Illinois census tracts and counties in future scripts.
+The purpose of this file is to prepare data for mapping. This entails loading and formatting the various data files and shapefiles (geographic boundary files) as well as joining them so that ACS data can be mapped onto Illinois census tracts and counties in future scripts. This script is broken out into the following steps / sections:
+
+- A: Load Data
+- B: Data Standardization - County Names
+- C: Data Standardization - Census Tract Numbers
+- D: Joining Datasets for County Level
+- E: Joining Datasets for Census Tract Level
+- F: Define and Apply IL Regions
 
 ```{r setup}
 #| echo: false
@@ -18,12 +25,9 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main 
 rm(list=ls())
 library(tidyverse)
 library(sf)
-
-# setting file path for proj.db since that's causing an error with maps generated with ggplot
-# Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
 
-## Load Data
+## A. Load Data
 The following code chunk loads the various datasets that will be used for mapping. These include:
 
 - SNAP retailers database with Link Match partners identified (output from the first script in this project)
@@ -58,7 +62,7 @@ acs_5yr_metadata_county <- read_csv("Data/ACS Data/County Level/5 year estimates
 acs_5yr_metadata_county$Label <- gsub("!!", ": ", acs_5yr_metadata_county$Label)
 ```
 
-## Data Standardization - County Names
+## B. Data Standardization - County Names
 
 This code chunk explores whether county names match across datasets. This is scratch work that does not need to be run. The important code for this topic is in the code chunk after this one.
 ```{r explore county names - optional to run}
@@ -137,7 +141,7 @@ SNAP_retailers$County <- case_when(
 ```
 
 
-## Data Standardization - Census Tract Numbers
+## C. Data Standardization - Census Tract Numbers
 
 The code chunk below investigates whether census tract names match across the ACS dataset and the census tract shapefile.
 - Census tract names in the acs_5yr_data_tract dataframe have the following name (format):
@@ -172,20 +176,41 @@ boundaries_tract_107.01_subset <- boundaries_census_tracts %>% filter(NAME == "1
 ```
 
 
-# Joining Datasets for County Level
+## D. Joining Datasets for County Level
+Before merging ACS data with geographic boundaries, I'll select the variables of interest in the ACS data and create a subset of the data with only those variables to have a more manageable dataset to work with (there are over 900 variables in the ACS data). 
 
+SNAP specific variables start at index 307 in the metadata file. I selected the following variables for now:
+
+- S2201_C01_001E / Estimate: Total: Households
+- S2201_C03_001E  /  Estimate: Households receiving food stamps/SNAP: Households
+- S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
+- S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
+
+This code chunk joins the county-level ACS data with the county boundaries shapefile. The SNAP_retailers data will be joined later on. It then keeps only the variables that will be used during mapping to make the dataset a more manageable size.
 ```{r join acs, LinkUp, and shape file - county level}
+# keep and rename only relevant variables from acs data
+acs_5yr_data_county <- acs_5yr_data_county %>% 
+  select(GEO_ID, NAME, County, # select only relevant variables
+         n_households = S2201_C01_001E,
+         n_hh_snap = S2201_C03_001E,
+         n_hh_snap_poor = S2201_C03_021E,
+         perc_hh_snap = S2201_C04_001E
+         ) %>%
+  mutate(n_households = as.numeric(n_households), # convert variables to numerical format
+         n_hh_snap = as.numeric(n_hh_snap),
+         n_hh_snap_poor = as.numeric(n_hh_snap_poor),
+         perc_hh_snap = as.numeric(perc_hh_snap))
+
 # merge acs data to county boundary shapefile
 county_acs <- merge(transform(boundaries_counties, COUNTY_NAM = tolower(COUNTY_NAM)),
                      transform(acs_5yr_data_county, County = tolower(County)),
                     by.x = "COUNTY_NAM", by.y = "County", all.x = TRUE)
-
-# merge LinkUp data to county_acs  
-
 ```
 
-# Joining Datasets for Census Tract Level
-Tract-level data needs to be joined by GEOID rather than tract number since tract numbers repeat across counties. 
+
+
+## E. Joining Datasets for Census Tract Level
+Tract-level data needs to be joined by GEOID rather than tract number since tract numbers repeat across counties. The following code chunk checks that GEOIDs match across the ACS and shapefile data. 
 ```{r tract GEOID check across datasets}
 # in acs data all geoIDs start with 1400000US then the geoID code that's the same as in shape file
 acs_5yr_data_tract$GEO_ID <- gsub("1400000US", "", acs_5yr_data_tract$GEO_ID)
@@ -202,19 +227,51 @@ length(unique(boundaries_census_tracts$GEOID)) # 3265 unique values
 length(unique(acs_5yr_data_tract$GEO_ID)) # 3265 unique values
 ```
 
-The checks on GEO ID above all checked out (no repeated GEO IDs, same GEO IDs in both files) so the data is now ready to merge.
+The checks on GEO ID above all checked out (no repeated GEO IDs, same GEO IDs in both files) so the data is now ready to merge. This code chunk joins the census tract-level ACS data with the census tract boundaries shapefile. The SNAP_retailers data will be joined later on.
 ```{r join acs, LinkUp, and shape file - census tract level}
+#| warning: false
+# keep and rename only relevant variables from acs data
+acs_5yr_data_tract <- acs_5yr_data_tract %>% 
+  select(GEO_ID, NAME, Tract_Number, County,
+         n_households = S2201_C01_001E,
+         n_hh_snap = S2201_C03_001E,
+         n_hh_snap_poor = S2201_C03_021E,
+         perc_hh_snap = S2201_C04_001E
+         ) %>%
+    mutate(n_households = as.numeric(n_households), # convert variables to numerical format
+         n_hh_snap = as.numeric(n_hh_snap),
+         n_hh_snap_poor = as.numeric(n_hh_snap_poor),
+         perc_hh_snap = as.numeric(perc_hh_snap)) # we get 8 NAs for this variable because value was "-"
+
 # merge acs data to census tract boundary shapefile
 tract_acs <- merge(boundaries_census_tracts,
                    acs_5yr_data_tract,
                    by.x = "GEOID", by.y = "GEO_ID", all = TRUE)
-
-# merge LinkUp data to county_acs  
-
-
 ```
 
+This code chunk saves a subset of the data dictionary (metadata file) with only the variables kept in the dataset and adds a column for the variable name for clarity.
+```{r save subset of relevant metadata}
+# keep only relevant metadata
+metadata_acs <- acs_5yr_metadata_county %>% 
+  filter(`Column Name` %in% c("S2201_C01_001E",
+                              "S2201_C03_001E",
+                              "S2201_C03_021E",
+                              "S2201_C04_001E")
+  )
 
+# add column for current variable names
+metadata_acs <- metadata_acs %>% 
+  mutate(`Variable Name` = 
+    case_when(
+      `Column Name` == "S2201_C01_001E" ~ "n_households",
+      `Column Name` == "S2201_C03_001E" ~ "n_hh_snap",
+      `Column Name` == "S2201_C03_021E" ~ "n_hh_snap_poor",
+      `Column Name` == "S2201_C04_001E" ~ "perc_hh_snap"
+    )
+  )
+```
+
+## F. Define and Apply IL Regions
 The below code chunk defines the regions that will be used to divide up the state. If differently-constructed regions are desired in the future, they should be adjusted in this code chunk and the one that follows it that applies these regions to the datasets. The rest of the file will run fine and consider this new division of regions as defined in this code chunk and applied in the following code chunk.
 ```{r define IL regions}
 #| results: hide
@@ -317,16 +374,114 @@ SNAP_retailers$region <- case_when(
 SNAP_retailers <- relocate(SNAP_retailers, region, .after = County)
 ```
 
-The code chunk below calculates the number of current LinkUp partners per region.
-```{r}
-table(SNAP_retailers$region, useNA = "always") 
+## G. Create Region-Level Dataset for Mapping 
+The code chunk below creates a grouped dataframe (dataset), grouped by region. Each row in the dataframe represents one region. The dataframe includes the following variables in addition to name and mapping coordinates:
 
-LinkUp_partners <- SNAP_retailers %>% filter(potential_partner == "Current Partner")
-table(LinkUp_partners$region, useNA = "always")
+- number of households in the region
+- number of SNAP-receiving households in the region
+- number of SNAP-receiving households that are below the poverty level in the region
+- percentage of households that receive SNAP in the region
+- number of Farm Direct LinkUp partners in the region
+- number of Brick & Mortar LinkUp partners in the region
+- total number of LinkUp partners in the region (Farm Direct + Brick & Mortar)
+
+```{r create grouped dataframe at region level}
+# create dataframe with geometry and ACS data grouped by region
+region_acs <- county_acs %>%
+  group_by(region) %>%
+  summarize(
+    n_households = sum(as.numeric(n_households)),
+    n_hh_snap = sum(as.numeric(n_hh_snap)),
+    n_hh_snap_poor = sum(as.numeric(n_hh_snap_poor))
+  ) %>% 
+ mutate(
+    perc_hh_snap = n_hh_snap / n_households
+  )
+  
+# create dataframe with number of LinkUp partners per region
+partners_by_region <- SNAP_retailers %>% 
+  group_by(region) %>%
+  summarize(
+    n_LinkUpPartners_farm_direct = sum(current_partner == "Farm Direct"),
+    n_LinkUpPartners_brick_mortar = sum(current_partner == "Brick & Mortar"),
+    n_LinkUpPartners_all = sum(potential_partner =="Current Partner", na.rm = TRUE),
+    n_potential_partner_retailers = sum(potential_partner == "Potential Partner", na.rm = TRUE),
+    n_unqualified_retailers = sum(potential_partner == "Unqualified", na.rm = TRUE),
+    n_unclassified_retailers = sum(is.na(potential_partner)))
+
+# merge LinkUp partner data to region_acs dataframe
+region_acs <- merge(region_acs,
+                    partners_by_region,
+                    by = "region")
+```
+
+## H. Clean up Environment
+Unlike the previous script, this script will not end with saving the data to csv. This is because the mappable column of the dataset will be lost when saving to csv. If we save to a mappable shapefile format, variable names will be truncated. In other words, saving the data as files in the project folder in order to read them in to the next script will create extra steps at the beginning of the following file. So, this script (#02) will need to be opened and run in full before running any scripts that come after it.
+
+The code chunk below cleans up the environment so that the only objects left in the environment are those that will be used in future scripts.
+```{r clean up environment}
+rm(list = c("acs_5yr_data_county", 
+            "acs_5yr_data_tract",
+            "acs_5yr_metadata_county",
+            "acs_5yr_metadata_tract"))
+```
+
+
+```{r saving mappable data to csv files}
+st_write(county_acs, "Data/Mappable Data/county_acs.csv", 
+         layer_options = "GEOMETRY=AS_WKT", 
+         append = FALSE)
+
+st_write(tract_acs, "Data/Mappable Data/tract_acs.csv", 
+         layer_options = "GEOMETRY = AS_WKT", 
+         append = FALSE)
+
+st_write(region_acs, "Data/Mappable Data/region_acs.csv", 
+         layer_options = "GEOMETRY = AS_WKT", 
+         append = FALSE)
+
+# do I need to save the SNAP data? Check if this script made any changes to it.
 ```
 
 
 
+
+
+
+
+
+
+# But.... bard also said using sf package would mean I wouldn't be limited for variable name length...?
+
+
+```{r save dataframes to csv}
+# ACTUALLY, DON'T WANT TO SAVE ANYTHING B/C WILL TRUNCATE VARIABLE NAMES TO SAVE TO SHAPEFILE
+# AND WILL UNDO GEOMETRY COLUMN TO SAVE TO CSV, SO HAVE THIS CHUNK JUST DELETE ALL UNNECESSARY 
+# AND INTERMEDIATE OBJECTS CREATED AND END WITH ONLY THE THINGS THAT WILL BE USED FOR MAPS
+# IN THE FOLLOWING SCRIPTS IN THE ENVIRONMENT.
+
+# save regions_acs to csv
+st_write(region_acs, "Data/Mappable Data/regional_acs_partners_data.shp")
+
+shapefile_creation_test <- st_read("Data/Mappable Data/regional_acs_partners_data.shp")
+
+# save county-level SNAP data to csv (doesn't include aggregated LinkUp partners / SNAP retailers data)
+write_csv(county_acs, file = "Data/Mappable Data/county_acs_data.csv")
+
+# save census tract-level data to csv (doesn't include aggregated LinkUp partners / SNAP retailers data)
+write_csv(tract_acs, file = "Data/Mappable Data/tract_acs_data.csv")
+
+# create easily mappable version of SNAP retailers dataframe (convert longitude and latitude to geometry)
+SNAP_retailers_coords <- st_as_sf(SNAP_retailers,
+                                  coords = c("Longitude", "Latitude"))
+
+
+
+# maybe write to csv a version of the SNAP_retailers df that has a geometry column?
+# geometry nature of it will be undone, won't work unless I redo the geometry column in following script
+county_acs_data_export_test <- read_csv("Data/Mappable Data/county_acs_data.csv")
+
+```
 
 
 

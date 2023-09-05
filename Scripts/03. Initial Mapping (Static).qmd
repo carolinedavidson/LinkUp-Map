@@ -5,6 +5,7 @@ format: html
 ---
 
 # Step 3: Initial Mapping (Static, i.e. Noninteractive)
+NOTE: This script does not load in data files like the previous ones. Instead, you MUST RUN SCRIPT "02. Preparing Mappable Data" before using or running this script. Script 02 loads and prepares the data used in this script.
 
 ```{r setup}
 #| echo: false
@@ -12,9 +13,13 @@ format: html
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main project folder as working directory
 
-rm(list=ls())
+
 library(tidyverse)
 library(sf)
+library(leaflet)
+
+# setting file path for proj.db since that's causing an error with maps generated with ggplot
+Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
 
 The below code chunk loads the csv datafiles that the previous two scripts create.
@@ -22,56 +27,50 @@ The below code chunk loads the csv datafiles that the previous two scripts creat
 
 ```
 
-# MOVED OVER FROM SCRIPT 2
+
 
 # Initial Mapping
-At this point I'll select the variables of interest in the ACS data and create a subset of the data with only those variables to have a more manageable dataset to work with (there are over 900 variables in the ACS data). 
 
-SNAP specific variables start at index 307 in the metadata file. I selected the following variables for now:
 
-- S2201_C03_001E  /  Estimate: Households receiving food stamps/SNAP: Households
-- S2201_C03_021E /  Estimate: Households receiving food stamps/SNAP: Households: POVERTY STATUS IN THE PAST 12 MONTHS: Below poverty level
-- S2201_C04_001E  /  Estimate: Percent households receiving food stamps/SNAP: Households
-# UPDATE BELOW ONCE I MERGE LINKUP DATA IN!
-```{r subset data for relevant SNAP variables}
-# COUNTY LEVEL DATA
-# creating a subset of my county_acs dataframe to mess around with more easily here:
-county_acs_subset <- county_acs %>% 
-  select("COUNTY_NAM", "GEO_ID", "NAME", "S2201_C03_001E", "S2201_C03_021E", "S2201_C04_001E",
-         "FID", "CO_FIPS", "Shape__Are", "Shape__Len", "geometry")
+```{r initial basic maps - perc hh snap}
+# map of counties by percent of households receiving food stamps/SNAP
+plot(county_acs["perc_hh_snap"])   
 
-# all the acs data is characters, resave relevant numbers as numeric
-county_acs_subset <- county_acs_subset %>% 
-  mutate(S2201_C03_001E = as.numeric(S2201_C03_001E), 
-         S2201_C03_021E = as.numeric(S2201_C03_021E), 
-         S2201_C04_001E = as.numeric(S2201_C04_001E))
+plot(tract_acs["perc_hh_snap"])
 
-# CENSUS TRACT LEVEL DATA
-tract_acs_subset <- tract_acs %>%
-  select("GEOID", "COUNTYFP", "Tract_Number", "County", 
-         "S2201_C03_001E", "S2201_C03_021E", "S2201_C04_001E",
-         "ALAND", "AWATER", "geometry")
+plot(region_acs["perc_hh_snap"])
 
-# convert relevant ACS data to numeric format
-tract_acs_subset <- tract_acs_subset %>%
-  mutate(S2201_C03_001E = as.numeric(S2201_C03_001E), 
-         S2201_C03_021E = as.numeric(S2201_C03_021E), 
-         S2201_C04_001E = as.numeric(S2201_C04_001E))
-# 8 NAs introduced for S2201_C04_001E where value was: -
+plot(region_acs["n_hh_snap"])
+
+plot(region_acs["n_LinkUpPartners_all"])
+
+```
+
+```{r basic leaflet map}
+# create subset of SNAP_retailers that only includes current partners
+LinkUp_Partners <- SNAP_retailers %>% 
+  filter(potential_partner == "Current Partner")
+
+leaflet_counties <- leaflet() %>%
+  addTiles() %>%
+  addPolygons(
+    data = county_acs,
+    fillColor = "white",
+    color = "green"
+  ) %>% 
+  addMarkers(lat = LinkUp_Partners$Latitude,
+             lng = LinkUp_Partners$Longitude)
+
+leaflet_counties
 ```
 
 
 
-
-
-```{r initial basic maps - county level}
-# map of counties by percent of households receiving food stamps/SNAP
-plot(county_acs_subset["S2201_C04_001E"])       
-
-
+```{r ggplot maps can't get to work}
+# can't get this to work
 ggplot() +
-  geom_sf(data = county_acs_subset,
-          aes(fill = S2201_C04_001E, color = S2201_C04_001E)) +
+  geom_sf(data = county_acs,
+          aes(fill = perc_hh_snap, color = perc_hh_snap)) +
   scale_fill_brewer(palette = "YlGn", name = "Percentage", direction = -1) +
   scale_color_brewer(palette = "YlGn", name = "Percentage", direction = -1) +
   theme_void() +
@@ -79,8 +78,8 @@ ggplot() +
     title = "Percent of Households Receiving Food Stamps / SNAP by County",
     subtitle = "2021 5-Year Estimates from ACS"
   )
-
 ```
+
 
 ```{r}
 # intermediate materials to send
