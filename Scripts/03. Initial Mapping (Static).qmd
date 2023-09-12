@@ -13,36 +13,51 @@ NOTE: This script does not load in data files like the previous ones. Instead, y
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main project folder as working directory
 
-
+rm(list=ls())
 library(tidyverse)
 library(sf)
 library(leaflet)
+library(ggplot2)
 
 # setting file path for proj.db since that's causing an error with maps generated with ggplot
-Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
+# Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
 ```
 
-The below code chunk loads the csv datafiles that the previous two scripts create.
+The below code chunk loads the csv datafiles that the previous two scripts create. For the county, tract, and region-level files, we need a 2-step approach: (1) read in the csv file, (2) convert the geometry column back to a mappable format. For the SNAP_level data, we will create the geometry column in this dataframe.
 ```{r load data}
-
+# region
+region_acs <- read_csv("Data/Mappable Data/region_acs.csv", show_col_types = FALSE)
+region_acs <- st_as_sf(region_acs, 
+                       wkt = "geometry_wkt",
+                       crs = "+proj=longlat +datum=WGS84 +no_defs")
+region_acs <- region_acs %>% rename("geometry" = "geometry_wkt")
+# county
+county_acs <- read_csv("Data/Mappable Data/county_acs.csv", show_col_types = FALSE)
+county_acs <- st_as_sf(county_acs, 
+                       wkt = "geometry_wkt",
+                       crs = "+proj=longlat +datum=WGS84 +no_defs")
+county_acs <- county_acs %>% rename("geometry" = "geometry_wkt")
+# tract
+tract_acs <- read_csv("Data/Mappable Data/tract_acs.csv", show_col_types = FALSE)
+tract_acs <- st_as_sf(tract_acs, 
+                      wkt = "geometry_wkt",
+                      crs = "+proj=longlat +datum=WGS84 +no_defs")
+tract_acs <- tract_acs %>% rename("geometry" = "geometry_wkt")
 ```
-
-
 
 # Initial Mapping
 
-
 ```{r initial basic maps - perc hh snap}
 # map of counties by percent of households receiving food stamps/SNAP
-plot(county_acs["perc_hh_snap"])   
+plot(county_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by County")
 
-plot(tract_acs["perc_hh_snap"])
+plot(tract_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Census Tract")
 
-plot(region_acs["perc_hh_snap"])
+plot(region_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Region")
 
-plot(region_acs["n_hh_snap"])
+plot(region_acs["n_hh_snap"], main = "Number of Households Receiving SNAP by Region")
 
-plot(region_acs["n_LinkUpPartners_all"])
+plot(region_acs["n_LinkUpPartners_all"], main = "Number of LinkUp Partners by Region")
 
 ```
 
@@ -67,6 +82,13 @@ leaflet_counties
 
 
 ```{r ggplot maps can't get to work}
+# trying again
+ggplot(county_acs) +
+  geom_sf(aes(fill = perc_hh_snap)) + 
+  scale_fill_viridis_c() + 
+  labs(title = "Percentage of Households Receiving SNAP by County") +
+  theme_minimal()
+
 # can't get this to work
 ggplot() +
   geom_sf(data = county_acs,

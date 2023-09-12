@@ -15,6 +15,8 @@ The purpose of this file is to prepare data for mapping. This entails loading an
 - D: Joining Datasets for County Level
 - E: Joining Datasets for Census Tract Level
 - F: Define and Apply IL Regions
+- G: Create Region-level Dataset for Mapping
+- H: Save Mappable Data to csv
 
 ```{r setup}
 #| echo: false
@@ -22,7 +24,7 @@ The purpose of this file is to prepare data for mapping. This entails loading an
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main project folder as working directory
 
-rm(list=ls())
+rm(list = ls())
 library(tidyverse)
 library(sf)
 ```
@@ -415,79 +417,33 @@ region_acs <- merge(region_acs,
                     by = "region")
 ```
 
-## H. Clean up Environment
-Unlike the previous script, this script will not end with saving the data to csv. This is because the mappable column of the dataset will be lost when saving to csv. If we save to a mappable shapefile format, variable names will be truncated. In other words, saving the data as files in the project folder in order to read them in to the next script will create extra steps at the beginning of the following file. So, this script (#02) will need to be opened and run in full before running any scripts that come after it.
-
-The code chunk below cleans up the environment so that the only objects left in the environment are those that will be used in future scripts.
-```{r clean up environment}
-rm(list = c("acs_5yr_data_county", 
-            "acs_5yr_data_tract",
-            "acs_5yr_metadata_county",
-            "acs_5yr_metadata_tract"))
-```
-
+## H. Save Mappable Data to CSV
 
 ```{r saving mappable data to csv files}
-st_write(county_acs, "Data/Mappable Data/county_acs.csv", 
-         layer_options = "GEOMETRY=AS_WKT", 
-         append = FALSE)
+# COUNTY-LEVEL DATA
+# convert geometry column to text so it won't get deleted when saving to csv
+county_acs$geometry_wkt <- st_as_text(county_acs$geometry)
+# remove old geometry column (will cause problems while saving to csv otherwise)
+county_acs$geometry <- NULL 
+# save to csv
+write.csv(county_acs, "Data/Mappable Data/county_acs.csv", row.names = FALSE)
 
-st_write(tract_acs, "Data/Mappable Data/tract_acs.csv", 
-         layer_options = "GEOMETRY = AS_WKT", 
-         append = FALSE)
+# CENSUS TRACT-LEVEL DATA (same steps as for county above)
+tract_acs$geometry_wkt <- st_as_text(tract_acs$geometry)
+tract_acs$geometry <- NULL
+write.csv(tract_acs, "Data/Mappable Data/tract_acs.csv", row.names = FALSE)
 
-st_write(region_acs, "Data/Mappable Data/region_acs.csv", 
-         layer_options = "GEOMETRY = AS_WKT", 
-         append = FALSE)
+# REGION-LEVEL DATA (same steps as for county above)
+region_acs$geometry_wkt <- st_as_text(region_acs$geometry)
+region_acs$geometry <- NULL
+write.csv(region_acs, "Data/Mappable Data/region_acs.csv", row.names = FALSE)
 
-# do I need to save the SNAP data? Check if this script made any changes to it.
+# save metadata file that has variable names, codes, and descriptions
+write.csv(metadata_acs, "Data/Mappable Data/metadata_acs.csv", row.names = FALSE)
+
+# save updated SNAP_retailers data to csv (corrected county names to match and added region)
+write.csv(SNAP_retailers, "Data/Mappable Data/SNAP_retailers.csv", row.names = FALSE)
 ```
-
-
-
-
-
-
-
-
-
-# But.... bard also said using sf package would mean I wouldn't be limited for variable name length...?
-
-
-```{r save dataframes to csv}
-# ACTUALLY, DON'T WANT TO SAVE ANYTHING B/C WILL TRUNCATE VARIABLE NAMES TO SAVE TO SHAPEFILE
-# AND WILL UNDO GEOMETRY COLUMN TO SAVE TO CSV, SO HAVE THIS CHUNK JUST DELETE ALL UNNECESSARY 
-# AND INTERMEDIATE OBJECTS CREATED AND END WITH ONLY THE THINGS THAT WILL BE USED FOR MAPS
-# IN THE FOLLOWING SCRIPTS IN THE ENVIRONMENT.
-
-# save regions_acs to csv
-st_write(region_acs, "Data/Mappable Data/regional_acs_partners_data.shp")
-
-shapefile_creation_test <- st_read("Data/Mappable Data/regional_acs_partners_data.shp")
-
-# save county-level SNAP data to csv (doesn't include aggregated LinkUp partners / SNAP retailers data)
-write_csv(county_acs, file = "Data/Mappable Data/county_acs_data.csv")
-
-# save census tract-level data to csv (doesn't include aggregated LinkUp partners / SNAP retailers data)
-write_csv(tract_acs, file = "Data/Mappable Data/tract_acs_data.csv")
-
-# create easily mappable version of SNAP retailers dataframe (convert longitude and latitude to geometry)
-SNAP_retailers_coords <- st_as_sf(SNAP_retailers,
-                                  coords = c("Longitude", "Latitude"))
-
-
-
-# maybe write to csv a version of the SNAP_retailers df that has a geometry column?
-# geometry nature of it will be undone, won't work unless I redo the geometry column in following script
-county_acs_data_export_test <- read_csv("Data/Mappable Data/county_acs_data.csv")
-
-```
-
-
-
-
-
-
 
 
 
