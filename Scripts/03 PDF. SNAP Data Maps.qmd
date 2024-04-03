@@ -1,5 +1,5 @@
 ---
-title: "03. SNAP Data Maps"
+title: "Overview of SNAP in Illinois"
 author: "Caroline Davidson"
 format: pdf
 ---
@@ -11,8 +11,16 @@ format: pdf
 #| include: false
 knitr::opts_chunk$set(echo = FALSE)
 
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main project folder as working directory
+
 library(sf)
 library(tidyverse)
+
+```
+
+
+```{r percentage households SNAP}
+map_perc_hh_snap_county_all
 
 ```
 

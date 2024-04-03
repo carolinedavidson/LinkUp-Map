@@ -27,6 +27,7 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file()) # set main 
 rm(list = ls())
 library(tidyverse)
 library(sf)
+library(rgdal)
 ```
 
 ## A. Load Data
@@ -417,7 +418,94 @@ region_acs <- merge(region_acs,
                     by = "region")
 ```
 
-## H. Save Mappable Data to CSV
+## H. Aggregate LinkUp Partners and SNAP retailers data for County and Tract Levels
+This section counts the number of LinkUp partners and SNAP retailers by type in each County and in each Census Tract, similar to the above section that does this for the region. This section uses a different method than the above section since we do not have a Region variable in the LinkUp Partners data or SNAP_retailers data.
+```{r aggregate retailers data to county level}
+# format mappable coordinates for SNAP retailers dataframe
+SNAP_retailers <- st_as_sf(SNAP_retailers, 
+                           coords = c("Longitude", "Latitude"),
+                           crs = "+proj=longlat +datum=WGS84 +no_defs")
+
+# add number of LinkUp partners total per county
+county_intersection <- st_intersects(county_acs, 
+                                     SNAP_retailers %>% filter(potential_partner == "Current Partner"))
+county_acs$n_LinkUpPartners_all <- lengths(county_intersection)
+
+# add number of Farm Direct partners per county
+county_intersection <- st_intersects(county_acs, 
+                                     SNAP_retailers %>% filter(current_partner == "Farm Direct"))
+county_acs$n_LinkUpPartners_farm_direct <- lengths(county_intersection)
+
+# add number of Brick & Mortar partners per county
+county_intersection <- st_intersects(county_acs, 
+                                     SNAP_retailers %>% filter(current_partner == "Brick & Mortar"))
+county_acs$n_LinkUpPartners_brick_mortar <- lengths(county_intersection)
+
+# add number of SNAP retailers classified as potential partners
+county_intersection <- st_intersects(county_acs, 
+                                     SNAP_retailers %>% filter(potential_partner == "Potential Partner"))
+county_acs$n_potential_partner_retailers <- lengths(county_intersection)
+
+# add number of SNAP retailers classified as unqualified to be partners
+county_intersection <- st_intersects(county_acs, 
+                                     SNAP_retailers %>% filter(potential_partner == "Unqualified"))
+county_acs$n_unqualified_retailers <- lengths(county_intersection)
+
+# add number of SNAP retailers that are unclassified
+county_intersection <- st_intersects(county_acs, 
+                                     SNAP_retailers %>% filter(is.na(potential_partner)))
+county_acs$n_unclassified_retailers <- lengths(county_intersection)
+
+rm(county_intersection)
+
+# I relied on section 3.5 of this resource for this code chunk:
+# https://www.paulamoraga.com/book-spatial/the-sf-package-for-spatial-vector-data.html#:~:text=We%20can%20use%20the%20st_intersects,as%20seen%20in%20Figure%203.5. 
+```
+
+This chunk does the same thing as the above one for the census tract level.
+```{r aggregate retailers data to tract level}
+# first need to convert the CRS for the tract data to match my other mappable objects
+# for some reason, the tract data comes with the CRS  BCS_North_American_1983 
+# the rest comes with WGS 84
+# consulted this resource: https://bookdown.org/robinlovelace/geocompr/reproj-geo-data.html
+tract_acs <- st_transform(tract_acs, st_crs(county_acs))
+
+st_read("Data/Geographic Boundaries/Census Tracts/tl_2022_17_tract/tl_2022_17_tract.shp")
+# add number of LinkUp partners total per tract
+tract_intersection <- st_intersects(tract_acs, 
+                                    SNAP_retailers %>% filter(potential_partner == "Current Partner"))
+tract_acs$n_LinkUpPartners_all <- lengths(tract_intersection)
+
+# add number of Farm Direct partners per tract
+tract_intersection <- st_intersects(tract_acs, 
+                                    SNAP_retailers %>% filter(current_partner == "Farm Direct"))
+tract_acs$n_LinkUpPartners_farm_direct <- lengths(tract_intersection)
+
+# add number of Brick & Mortar partners per tract
+tract_intersection <- st_intersects(tract_acs, 
+                                    SNAP_retailers %>% filter(current_partner == "Brick & Mortar"))
+tract_acs$n_LinkUpPartners_brick_mortar <- lengths(tract_intersection)
+
+# add number of SNAP retailers classified as potential partners
+tract_intersection <- st_intersects(tract_acs, 
+                                    SNAP_retailers %>% filter(potential_partner == "Potential Partner"))
+tract_acs$n_potential_partner_retailers <- lengths(tract_intersection)
+
+# add number of SNAP retailers classified as unqualified to be partners
+tract_intersection <- st_intersects(tract_acs, 
+                                    SNAP_retailers %>% filter(potential_partner == "Unqualified"))
+tract_acs$n_unqualified_retailers <- lengths(tract_intersection)
+
+# add number of SNAP retailers that are unclassified
+tract_intersection <- st_intersects(tract_acs, 
+                                    SNAP_retailers %>% filter(is.na(potential_partner)))
+tract_acs$n_unclassified_retailers <- lengths(tract_intersection)
+
+rm(tract_intersection)
+```
+
+
+## I. Save Mappable Data to CSV
 
 ```{r saving mappable data to csv files}
 # COUNTY-LEVEL DATA

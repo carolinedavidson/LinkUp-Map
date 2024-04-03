@@ -5,7 +5,6 @@ format: html
 ---
 
 # Step 3: Initial Mapping (Static, i.e. Noninteractive)
-NOTE: This script does not load in data files like the previous ones. Instead, you MUST RUN SCRIPT "02. Preparing Mappable Data" before using or running this script. Script 02 loads and prepares the data used in this script.
 
 ```{r setup}
 #| echo: false
@@ -18,6 +17,7 @@ library(tidyverse)
 library(sf)
 library(leaflet)
 library(ggplot2)
+library(viridis)
 
 # setting file path for proj.db since that's causing an error with maps generated with ggplot
 # Sys.setenv(PROJ_LIB = "/Library/Frameworks/R.framework/Versions/4.2/Resources/library/sf/proj/proj.db")
@@ -43,6 +43,11 @@ tract_acs <- st_as_sf(tract_acs,
                       wkt = "geometry_wkt",
                       crs = "+proj=longlat +datum=WGS84 +no_defs")
 tract_acs <- tract_acs %>% rename("geometry" = "geometry_wkt")
+
+SNAP_retailers <- read_csv("Data/Mappable Data/SNAP_retailers.csv", show_col_types = FALSE)
+SNAP_retailers <- st_as_sf(SNAP_retailers, 
+                           coords = c("Longitude", "Latitude"),
+                           crs = "+proj=longlat +datum=WGS84 +no_defs")
 ```
 
 # Initial Mapping
@@ -50,16 +55,55 @@ tract_acs <- tract_acs %>% rename("geometry" = "geometry_wkt")
 ```{r initial basic maps - perc hh snap}
 # map of counties by percent of households receiving food stamps/SNAP
 plot(county_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by County")
+plot(county_acs["n_hh_snap"], main = "Number of Households Receiving SNAP by County")
+plot(county_acs["n_hh_snap_poor"], main = "Number of Poor Households Receiving SNAP by County")
+plot(county_acs["n_households"], main = "Number of Households by County")
 
-plot(tract_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Census Tract")
-
-plot(region_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Region")
-
-plot(region_acs["n_hh_snap"], main = "Number of Households Receiving SNAP by Region")
-
-plot(region_acs["n_LinkUpPartners_all"], main = "Number of LinkUp Partners by Region")
+# plot(tract_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Census Tract")
+# 
+# plot(region_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by Region")
+# 
+# plot(region_acs["n_hh_snap"], main = "Number of Households Receiving SNAP by Region")
+# 
+# plot(region_acs["n_LinkUpPartners_all"], main = "Number of LinkUp Partners by Region")
 
 ```
+
+```{r subset without Cook and without Cook and Collar counties}
+# create subsets
+county_acs_ex_cook <- county_acs %>% 
+  filter(!(COUNTY_NAM %in% c("cook")))
+
+county_acs_ex_collar <- county_acs %>%
+  filter(!(COUNTY_NAM %in% c("cook", "dupage", "kane", "lake", "mchenry", "will")))
+
+# create maps
+plot(county_acs["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by County")
+plot(county_acs_ex_cook["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by County, excluding Cook")
+plot(county_acs_ex_collar["perc_hh_snap"], main = "Percentage of Households Receiving SNAP by County, excluding Cook and Collar")
+# no changes in scaling of these maps
+
+plot(county_acs["n_hh_snap"], main = "Number of Households Receiving SNAP by County")
+plot(county_acs_ex_cook["n_hh_snap"], main = "Number of Households Receiving SNAP by County, excluding Cook")
+plot(county_acs_ex_collar["n_hh_snap"], main = "Number of Households Receiving SNAP by County, excluding Cook and Collar")
+# interesting changes in ex Cook and ex Collar maps
+
+plot(county_acs["n_hh_snap_poor"], main = "Number of Poor Households Receiving SNAP by County")
+plot(county_acs_ex_cook["n_hh_snap_poor"], main = "Number of Poor Households Receiving SNAP by County, excluding Cook")
+plot(county_acs_ex_collar["n_hh_snap_poor"], main = "Number of Poor Households Receiving SNAP by County, excluding Cook and Collar")
+# interesting changes in ex Cook and ex Collar maps
+
+plot(county_acs["n_households"], main = "Number of Households by County")
+plot(county_acs_ex_cook["n_households"], main = "Number of Households by County, excluding Cook")
+plot(county_acs_ex_collar["n_households"], main = "Number of Households by County, excluding Cook and Collar")
+# interesting changes in ex Cook map and additional change in ex Collar map
+```
+
+
+
+
+
+
 
 ```{r basic leaflet map}
 # create subset of SNAP_retailers that only includes current partners
@@ -73,13 +117,13 @@ leaflet_counties <- leaflet() %>%
     fillColor = "white",
     color = "green"
   ) %>% 
-  addMarkers(lat = LinkUp_Partners$Latitude,
-             lng = LinkUp_Partners$Longitude)
+  addMarkers(lat = LinkUp_Partners$Y,
+             lng = LinkUp_Partners$X)
 
 leaflet_counties
 ```
 
-
+## Problematic portion
 
 ```{r ggplot maps can't get to work}
 # trying again
@@ -101,6 +145,162 @@ ggplot() +
     subtitle = "2021 5-Year Estimates from ACS"
   )
 ```
+
+
+
+
+
+
+
+### specific Jewel Osco investigation:
+
+```{r address investigation}
+# this code chunk investigates this address: 443 E 34th St, Chicago, IL 60616
+SNAP_retailers <- SNAP_retailers %>% 
+  mutate(Flag = "")
+SNAP_retailers$Flag <- ifelse(SNAP_retailers$Address == "443 E 34th St", "Investigate SNAP", "")
+
+# subset data for map
+Jewel_Osco_4043 <- SNAP_retailers %>% filter(Flag != "")
+Chicagoland_tract <- tract_acs %>% filter(region == "Chicagoland")
+Chicagoland_tract_valid <- st_make_valid(Chicagoland_tract)
+buffer_Jewel_Osco_4043 <- st_buffer(Jewel_Osco_4043$geometry, dist = 2000)
+near_Jewel_Osco_4043 <- st_intersects(Chicagoland_tract_valid, buffer_Jewel_Osco_4043)
+tracts_near_Jewel_Osco_4043 <- Chicagoland_tract_valid[near_Jewel_Osco_4043, ]
+
+# Subset the census tracts dataframe to only include the tracts that are within 3 miles of the point
+bbox <- st_bbox(c(-87.63994, -87.58994, 41.80806, 41.85806))
+near_census_tracts_df <- st_crop(Chicagoland_tract, bbox)
+
+
+near_census_tracts_df <- Chicagoland_tract %>%
+  st_intersects(st_buffer(, 3))
+
+leaflet() %>%
+  addTiles() %>%
+  addPolygons(
+    data = buffer_Jewel_Osco_4043)
+
+
+
+
+# create static map
+Chicagoland_tracts_map <- plot(Chicagoland_tract["perc_hh_snap"])
+
+
+# define color palette for map
+viridis_palette <- viridis::viridis_pal(9, option = "magma")
+
+pal <- colorNumeric(
+  palette = "Blues",
+  domain = Chicagoland_tract$perc_hh_snap)
+
+# leaflet map  
+leaflet() %>%
+  addTiles() %>%
+  addPolygons(
+    data = Chicagoland_tract,
+    fillColor = "white",
+    color = "black"
+    ) %>% 
+  addMarkers(lat = Jewel_Osco_4043$Y,
+             lng = Jewel_Osco_4043$X)
+```
+
+that Jewel Osco is in tract 3510
+nearby tracts are:
+3501
+8410
+8365
+8364
+3901
+3902
+3903
+8360
+3801
+3602
+3511
+3802
+8358
+8446
+3806
+8396
+3514
+8395
+8420
+8392
+3515
+3504
+```{r}
+# new approach
+# create new census tract variable to match easily (removes .00)
+Chicagoland_tract$Tract_Name <- sub(".00$", "", Chicagoland_tract$Tract_Number)
+
+nearby_tracts <- c(3510, 3501, 8410, 8365, 8364, 3901, 3902, 3903, 
+                   8360, 3801, 3602, 3511, 3802, 8358, 8446, 3806, 
+                   8396, 3514, 8395, 8420, 8392, 3515, 3504)
+
+Jewel_tract_subset <- Chicagoland_tract %>% 
+  filter(Tract_Name %in% nearby_tracts)
+
+
+plot(Jewel_tract_subset["perc_hh_snap"], main = "Percentage of Households Receiving SNAP")
+plot(Jewel_tract_subset["n_hh_snap"], main = "Number of Households Receiving SNAP")
+plot(Jewel_tract_subset["n_households"], main = "Number of Households Total")
+plot(Jewel_tract_subset["n_hh_snap_poor"], main = "Number of Poor Households Receiving SNAP")
+```
+
+
+```{r leaflet map around Jewel Osco}
+# create dataframe of centroids
+Jewel_tract_centroids <- st_centroid(Jewel_tract_subset)
+
+Jewel_tract_centroids <- mutate(Jewel_tract_centroids,
+                                centroid_lat = st_coordinates(geometry)[, 2],
+                                centroid_lon = st_coordinates(geometry)[, 1])
+# Option 1
+leaflet() %>%
+  addTiles() %>%
+  addPolygons(
+    data = Jewel_tract_subset,
+    fillColor = "white",
+    color = "blue",
+    label = Jewel_tract_subset$Tract_Name,
+    labelOptions = labelOptions(noHide = T)
+  ) %>% 
+  addMarkers(lat = Jewel_Osco_4043$Y,
+             lng = Jewel_Osco_4043$X)
+
+# Option 2
+leaflet() %>%
+  addTiles() %>%
+  addPolygons(
+    data = Jewel_tract_subset,
+    fillColor = "white",
+    color = "blue"
+    ) %>% 
+  addMarkers(lat = Jewel_Osco_4043$Y,
+             lng = Jewel_Osco_4043$X) %>%
+ addLabelOnlyMarkers(
+    data = Jewel_tract_centroids,
+    lng = Jewel_tract_centroids$centroid_lon,
+    lat = Jewel_tract_centroids$centroid_lat,
+    label = Jewel_tract_centroids$Tract_Name,
+    labelOptions = labelOptions(noHide = T, 
+                                textsize = "7px",
+                                direction = "center")
+  )
+
+
+# save subset of df to save to csv
+Jewel_subset_selection <- Jewel_tract_subset %>% 
+  as.data.frame() %>%
+  select(Tract_Number, n_households, n_hh_snap, n_hh_snap_poor, perc_hh_snap)
+
+write.csv(Jewel_subset_selection, "Data/Mappable Data/Jewel_subset_selection.csv", row.names = FALSE)
+```
+
+
 
 
 ```{r}
